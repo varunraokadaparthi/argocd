@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: demo-app
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
