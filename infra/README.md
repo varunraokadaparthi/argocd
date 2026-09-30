@@ -39,12 +39,16 @@ in `scripts/lib.sh`.
 | `kind`    | v0.31.0  | pinned binary → `~/.local/bin`             |
 | `kubectl` | v1.35.0  | pinned binary → `~/.local/bin`             |
 | `helm`    | v3.20.2  | pinned binary → `~/.local/bin`             |
-| `argocd`  | latest   | pinned binary → `~/.local/bin`             |
+| `argocd`  | v3.5.3   | pinned binary → `~/.local/bin`             |
 
 podman comes from the package manager (`brew`, `dnf`, `apt-get`, `pacman` or
 `zypper`) because it needs system integration. Everything else is a pinned
 binary in `~/.local/bin`, which needs no sudo and behaves identically on every
 platform. Override the install location with `TOOLS_BIN`.
+
+**`argocd` must stay on 3.5.x.** The source hydrator that the promotion work
+in [../TODO.md](../TODO.md) depends on is beta as of Argo CD 3.5.0 and does
+not exist before it; keep the CLI in step with the server.
 
 **`kubectl` is deliberately pinned to the node image's Kubernetes version.**
 A skew wider than one minor is unsupported and fails in confusing ways. Note

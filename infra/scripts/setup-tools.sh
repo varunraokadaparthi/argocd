@@ -138,12 +138,10 @@ install_helm() {
   install -m 0755 "$SCRATCH/${OS}-${ARCH}/helm" "$TOOLS_BIN/helm"
 }
 
-# Tracks the latest release rather than a pin: the CLI is only used against
-# whatever ArgoCD version we install, and it stays compatible across minors.
 install_argocd() {
-  needs_install argocd || { log "argocd already installed ($(argocd version --client --short 2>/dev/null))"; return; }
+  needs_install argocd "$ARGOCD_VERSION" || { log "argocd $ARGOCD_VERSION already installed"; return; }
   install_binary argocd \
-    "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-${OS}-${ARCH}"
+    "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-${OS}-${ARCH}"
 }
 
 # --- host configuration ---------------------------------------------------
