@@ -1,0 +1,55 @@
+# An ApplicationSet is a template plus a generator: it produces one
+# Application per generator entry. Without it you would hand-write three
+# near-identical Application manifests and keep them in sync by hand.
+#
+# A list generator is used here rather than a cluster or git generator because
+# the environment-to-cluster mapping is fixed and worth reading at a glance:
+# stage is the hub itself, int and prod are the spokes.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: whoami
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - list:
+        elements:
+          # Clusters are addressed by registered name throughout. "in-cluster"
+          # is the name ArgoCD gives the cluster it runs on, so the hub needs
+          # no special casing here.
+          - env: stage
+            cluster: in-cluster
+          - env: int
+            cluster: int
+          - env: prod
+            cluster: prod
+
+  template:
+    metadata:
+      name: 'whoami-{{.env}}'
+    spec:
+      project: demo
+
+      source:
+        repoURL: https://github.com/varunraokadaparthi/argocd.git
+        targetRevision: argocd
+        path: 'apps/whoami/overlays/{{.env}}'
+
+      destination:
+        # Exactly one of name or server may be set; using name consistently
+        # keeps the mapping readable and survives a cluster being re-registered
+        # on a different address.
+        name: '{{.cluster}}'
+        namespace: 'demo-{{.env}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          # The overlays set a namespace but do not define the Namespace
+          # object, so ArgoCD creates it.
+          - CreateNamespace=true

@@ -1,0 +1,39 @@
+# An AppProject is ArgoCD's tenancy boundary. Applications belong to exactly
+# one project, and the project constrains what those Applications are allowed
+# to do: which repos they may read, which cluster/namespace pairs they may
+# deploy to, and which resource kinds they may create.
+#
+# Without this, every Application can deploy anything anywhere. The default
+# project is exactly that permissive, which is why real setups do not use it.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: demo
+  namespace: argocd
+spec:
+  description: Demo workloads owned by the platform team
+
+  # Only this repo. An Application in the demo project pointing anywhere else
+  # is rejected at sync time.
+  sourceRepos:
+    - https://github.com/varunraokadaparthi/argocd.git
+
+  # Destinations are (cluster, namespace) pairs. This tenant may only write to
+  # its own demo-* namespaces, on any of the three registered clusters.
+  destinations:
+    - name: in-cluster
+      namespace: demo-*
+    - name: int
+      namespace: demo-*
+    - name: prod
+      namespace: demo-*
+
+  # Namespaced resources are unrestricted; cluster-scoped ones are denied by
+  # default. Namespace is allowed so CreateNamespace=true works.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

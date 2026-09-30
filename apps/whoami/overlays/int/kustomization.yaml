@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demo-int
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: whoami-int
+      env: int
+    includeSelectors: false
+
+# Single replica: int is for fast feedback, not resilience.
+replicas:
+  - name: whoami
+    count: 1
