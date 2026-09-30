@@ -1,0 +1,14 @@
+# Argo CD itself, pinned. The version lives here rather than in the install
+# script so that upgrading is a reviewable diff instead of an argument to a
+# command someone ran once.
+#
+# install-with-hydrator.yaml rather than install.yaml: it already sets
+# hydrator.enabled=true and ships the commit-server, both of which the
+# promotion work in ../../TODO.md needs. Switching later means a reinstall.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/install-with-hydrator.yaml

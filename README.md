@@ -12,12 +12,32 @@ a demo app delivered to all three environments.
 Argo CD runs on `stage` and manages itself plus the two spokes.
 
 ```
-apps/whoami/          demo app: kustomize base + per-env overlays
-argocd/projects/      AppProject — the tenancy boundary
-argocd/applicationsets/  ApplicationSet — one Application per environment
-infra/clusters/       kind cluster definitions
-infra/scripts/        tooling and cluster lifecycle
+apps/whoami/                    demo app: kustomize base + per-env overlays
+argocd/install/                 Argo CD itself, version pinned
+argocd/projects/                AppProject — the tenancy boundary
+argocd/applicationsets/         ApplicationSet — one Application per environment
+argocd/cluster-registration/    RBAC granting the hub access to a spoke
+infra/clusters/                 kind cluster definitions
+infra/scripts/                  tooling, cluster lifecycle, bootstrap
 ```
+
+## Config or commands?
+
+Both, and the split is deliberate. You cannot GitOps your way into having
+Argo CD, so bootstrap is imperative — but the scripts are thin wrappers that
+apply config from this repo rather than inlining YAML.
+
+| Thing | Where it lives | Why |
+| --- | --- | --- |
+| Argo CD version and manifest | `argocd/install/` | Upgrading is a reviewable diff, not an argument someone typed once |
+| Spoke RBAC | `argocd/cluster-registration/` | Grants an identity, holds no credential |
+| AppProject, ApplicationSet | `argocd/` | Applied once, then Argo CD owns them |
+| App manifests | `apps/` | Argo CD reconciles these from git continuously |
+| **Cluster credentials** | **nowhere — generated at run time** | Bearer tokens must never be committed |
+
+The bootstrap order is `setup-tools` → `create-clusters` → `install-argocd` →
+`register-clusters` → `bootstrap-apps`. Each is idempotent and each refuses to
+run if the previous one has not.
 
 ---
 
@@ -52,70 +72,62 @@ Idempotent. Creates `stage`, `int`, `prod`, each single-node, each with its own
 pod/service CIDR, all on the shared `kind` podman network. Prints each
 cluster's in-cluster API endpoint, which step 4 needs.
 
-## 3. Install Argo CD on the hub ⬜
-
-Install **v3.5.3 with the hydrator manifest**, not plain `install.yaml`.
-Plain works for steps 3–7, but the promoter work in [TODO.md](TODO.md) needs
-the hydrator, and switching later means reinstalling.
+## 3. Install Argo CD on the hub ✅
 
 ```sh
-kubectl --context kind-stage create namespace argocd
-kubectl --context kind-stage -n argocd apply -f \
-  https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/install-with-hydrator.yaml
-kubectl --context kind-stage -n argocd rollout status deploy/argocd-server --timeout=300s
+cd infra
+./scripts/install-argocd.sh
 ```
 
-Get the initial admin password:
+Applies `argocd/install/`, which pins **v3.5.3 via
+`install-with-hydrator.yaml`** rather than plain `install.yaml`. That manifest
+already sets `hydrator.enabled: "true"` and ships the commit-server, both of
+which the promoter work in [TODO.md](TODO.md) needs. The script asserts the
+flag afterwards so a wrong pin fails loudly here instead of confusingly later.
 
-```sh
-kubectl --context kind-stage -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d; echo
-```
+Server-side apply is used out of necessity, not preference: the Argo CD CRDs
+exceed the 262144-byte limit on the annotation that client-side apply writes.
 
-Reach the UI. Port-forward works immediately:
+The script prints the version and initial admin password. Reach the UI with:
 
 ```sh
 kubectl --context kind-stage -n argocd port-forward svc/argocd-server 8081:443
 # https://localhost:8081  (user: admin)
 ```
 
-For the ingress path instead — the `stage` cluster maps host ports 8080/8443
-to 80/443 and its node is labelled `ingress-ready=true` — install
-ingress-nginx's kind manifest and add an Ingress. A `LoadBalancer` Service
-will never get an address; kind ships no cloud provider.
+For ingress instead — the `stage` cluster maps host ports 8080/8443 to 80/443
+and its node is labelled `ingress-ready=true` — install ingress-nginx's kind
+manifest and add an Ingress. A `LoadBalancer` Service will never get an
+address; kind ships no cloud provider.
 
-## 4. Register the spoke clusters ⬜
+## 4. Register the spoke clusters ✅
+
+```sh
+cd infra
+./scripts/register-clusters.sh
+```
 
 The ApplicationSet addresses clusters by registered name: `in-cluster`, `int`,
 `prod`. `in-cluster` exists by default; the spokes must be added.
 
-**The wrinkle.** Registration stores the spoke's API address in a Secret on the
-hub. The kubeconfig kind writes says `https://127.0.0.1:<random-port>`, which
-from inside an Argo CD pod means the pod itself. The hub must instead use
-`https://int-control-plane:6443` — verified reachable from a pod on `stage`,
-with matching cert SANs.
+**Why not `argocd cluster add`.** The hub must record the spoke's in-network
+address, `https://int-control-plane:6443` — the `127.0.0.1:<random-port>` in
+the kubeconfig would, from inside an Argo CD pod, mean the pod itself. But
+`argocd cluster add` connects to the spoke to create the ServiceAccount, and
+`int-control-plane` does not resolve from the *host*, only from inside the
+podman network. So the CLI cannot be pointed at the address that needs
+storing.
 
-But `argocd cluster add` connects to the spoke itself to create the
-ServiceAccount, and `int-control-plane` does not resolve from the *host* —
-only from inside the podman network. So the obvious command cannot be used
-as-is. Either:
+The script splits it instead:
 
-- run `argocd cluster add kind-int --name int` with the normal kubeconfig, then
-  patch the resulting cluster Secret's `server` field to the internal address; or
-- create the `argocd-manager` ServiceAccount, ClusterRoleBinding and token in
-  each spoke with `kubectl`, and build the cluster Secret directly with the
-  internal address.
+- `argocd/cluster-registration/argocd-manager-rbac.yaml` is applied to each
+  spoke. It holds the ServiceAccount, ClusterRole, binding and a requested
+  token Secret — no credential, so it lives in git.
+- The Secret on the hub is assembled at run time from that token plus the
+  internal address. It holds a bearer token and is never committed.
 
-The second is more declarative and avoids the CLI's connection test. Either
-way the result is a Secret in `argocd` on the hub labelled
-`argocd.argoproj.io/secret-type: cluster`, holding `name`, `server` and a
-`config` blob with the bearer token and CA.
-
-Verify:
-
-```sh
-argocd cluster list   # expect in-cluster, int, prod — all Successful
-```
+It then verifies each address from a pod inside the hub, checking DNS,
+routing and TLS against the stored CA.
 
 ## 5. Push the app config ⬜
 
@@ -126,22 +138,29 @@ and `argocd/**` is currently local only.
 git push origin argocd
 ```
 
+`bootstrap-apps.sh` warns if you skip this, and the symptom if you ignore it
+is `app path does not exist` on every Application.
+
 The repo is public, so **no read credentials are needed**. Write credentials
 become necessary only for the hydrator in [TODO.md](TODO.md).
 
-## 6. Apply the AppProject, then the ApplicationSet ⬜
-
-Order matters: an Application naming a project that does not exist is
-rejected.
+## 6. Apply the AppProject and ApplicationSet ✅
 
 ```sh
-kubectl --context kind-stage apply -f argocd/projects/demo.yaml
-kubectl --context kind-stage apply -f argocd/applicationsets/whoami.yaml
+cd infra
+./scripts/bootstrap-apps.sh
 ```
+
+Applies `argocd/projects/demo.yaml` then
+`argocd/applicationsets/whoami.yaml`, in that order — an Application naming a
+project that does not exist is rejected. The script refuses to run if Argo CD
+is missing or a spoke is unregistered, and warns about unpushed commits.
 
 The AppProject restricts this tenant to this repo and to `demo-*` namespaces
 on the three clusters, and permits `Namespace` as the only cluster-scoped kind
 so `CreateNamespace=true` works.
+
+This is the last imperative step. From here Argo CD reconciles from the repo.
 
 ## 7. Verify ⬜
 

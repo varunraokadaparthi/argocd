@@ -34,7 +34,10 @@ SPOKES=(int prod)
 CLUSTERS=("$HUB" "${SPOKES[@]}")
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$INFRA_DIR/.." && pwd)"
 CLUSTER_CONFIG_DIR="$INFRA_DIR/clusters"
+ARGOCD_DIR="$REPO_ROOT/argocd"
+ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
