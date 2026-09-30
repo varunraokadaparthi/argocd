@@ -1,7 +1,7 @@
 # infra
 
 Local multi-cluster environment for the ArgoCD setup: three kind clusters
-running on rootless podman.
+running on podman.
 
 | Cluster | Role  | Context      | Pod CIDR       | Service CIDR   |
 | ------- | ----- | ------------ | -------------- | -------------- |
@@ -14,21 +14,51 @@ ArgoCD runs on `stage` and manages itself plus the two spokes.
 ## Usage
 
 ```sh
+./scripts/setup-tools.sh       # install/verify tooling; --force to reinstall
 ./scripts/create-clusters.sh   # idempotent; skips clusters that already exist
 ./scripts/delete-clusters.sh   # only removes stage/int/prod
 ```
 
-## Requirements
+All three are safe to re-run.
 
-Everything below is checked by `require_tools` in `scripts/lib.sh`, which fails
-early rather than letting kind produce a confusing error.
+## Supported platforms
 
-- **podman** (rootless is fine) with entries in `/etc/subuid` and `/etc/subgid`
-- **kind** v0.31+
-- **kubectl**
-- **cgroup v2** with the `cpu`, `memory` and `pids` controllers delegated to
-  your user slice. Without delegation the kubelet fails to start inside the
-  node container. To enable:
+macOS on Apple Silicon or Intel, and Linux on amd64 or arm64.
+`setup-tools.sh` detects the platform with `uname` and picks the matching
+release asset; the pinned node image is a multi-arch manifest covering
+`linux/amd64` and `linux/arm64`.
+
+## Tooling
+
+`setup-tools.sh` installs and version-checks everything. Versions are pinned
+in `scripts/lib.sh`.
+
+| Tool      | Version  | Source                                    |
+| --------- | -------- | ----------------------------------------- |
+| `podman`  | any      | platform package manager                   |
+| `kind`    | v0.31.0  | pinned binary → `~/.local/bin`             |
+| `kubectl` | v1.35.0  | pinned binary → `~/.local/bin`             |
+| `helm`    | v3.20.2  | pinned binary → `~/.local/bin`             |
+| `argocd`  | latest   | pinned binary → `~/.local/bin`             |
+
+podman comes from the package manager (`brew`, `dnf`, `apt-get`, `pacman` or
+`zypper`) because it needs system integration. Everything else is a pinned
+binary in `~/.local/bin`, which needs no sudo and behaves identically on every
+platform. Override the install location with `TOOLS_BIN`.
+
+**`kubectl` is deliberately pinned to the node image's Kubernetes version.**
+A skew wider than one minor is unsupported and fails in confusing ways. Note
+that `kubectl version` reports the *server* version when a context is active —
+use `kubectl version --client` when checking by hand.
+
+## Host requirements
+
+### Linux
+
+- **cgroup v2** with `cpu`, `memory` and `pids` delegated to your user slice.
+  Without delegation the kubelet fails to start inside the node container.
+  This is the most common reason kind fails on a fresh box.
+  `setup-tools.sh` detects it and offers to write the drop-in:
 
   ```sh
   sudo mkdir -p /etc/systemd/system/user@.service.d
@@ -43,8 +73,21 @@ early rather than letting kind produce a confusing error.
   cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers
   ```
 
-Keep `kubectl` within one minor version of the node image (currently
-Kubernetes v1.35) — larger skew is unsupported and produces odd failures.
+- **subuid/subgid ranges** for your user, so rootless podman can map container
+  UIDs. Checked by `setup-tools.sh`; fix with
+  `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
+
+### macOS
+
+Containers run inside a Linux VM, so `setup-tools.sh` creates a podman machine
+sized for three control planes (6 CPU, 12 GB, 60 GB disk — override with
+`PODMAN_MACHINE_CPUS`, `PODMAN_MACHINE_MEMORY`, `PODMAN_MACHINE_DISK`). The
+machine is created `--rootful`, which is the configuration kind expects; the
+VM is already an isolation boundary. The default machine is undersized for
+this topology.
+
+Homebrew is required, and the machine must be running before
+`create-clusters.sh` — the preflight check will tell you if it is not.
 
 ## Notes on kind + podman
 
@@ -61,7 +104,7 @@ the hub reaches a spoke at its container name instead:
 kind get kubeconfig --name int --internal   # server: https://int-control-plane:6443
 ```
 
-Name resolution is provided by podman's `aardvark-dns`, and the API server
+Name resolution comes from podman's `aardvark-dns`, and the API server
 certificates already carry the right SANs.
 
 **There is no LoadBalancer.** kind ships no cloud provider, so
@@ -71,5 +114,5 @@ controller on `stage` puts the ArgoCD UI on <http://localhost:8080>. The hub
 node is labelled `ingress-ready=true` for ingress-nginx's kind manifest.
 The spokes have no port mappings; reach them with `kubectl port-forward`.
 
-**Node images are ~1 GB each.** After tearing clusters down, reclaim space with
-`podman system prune`.
+**Node images are ~1 GB each.** After tearing clusters down, reclaim space
+with `podman system prune`.

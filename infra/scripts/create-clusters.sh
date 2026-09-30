@@ -16,7 +16,7 @@ for cluster in "${CLUSTERS[@]}"; do
   log "creating cluster '$cluster'"
   kind create cluster \
     --name "$cluster" \
-    --config "$KIND_CONFIG_DIR/$cluster.yaml" \
+    --config "$CLUSTER_CONFIG_DIR/$cluster.yaml" \
     --image "$KIND_NODE_IMAGE" \
     --wait 120s
 done
