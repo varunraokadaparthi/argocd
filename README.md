@@ -39,6 +39,11 @@ The bootstrap order is `setup-tools` → `create-clusters` → `install-argocd` 
 `register-clusters` → `bootstrap-apps`. Each is idempotent and each refuses to
 run if the previous one has not.
 
+To pause without losing anything, `stop-clusters.sh` and `start-clusters.sh`
+stop and restart the node containers; etcd, Argo CD and the registered spokes
+all survive. `delete-clusters.sh` discards the clusters and is the only way to
+get the disk back.
+
 ---
 
 # Full setup
