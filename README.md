@@ -71,6 +71,59 @@ need after a restart.
 Two things that are wrong for production and deliberate here: TLS is
 disabled, and the seal uses a single key share so a script can replay it.
 
+## Secrets: Vault → the app
+
+```sh
+cd infra
+./scripts/secrets-bootstrap.sh
+```
+
+Seeds Vault, installs External Secrets Operator on the hub, and gives the hub
+a narrow identity on each spoke. Idempotent.
+
+```
+Vault  demo/whoami {greeting}          container, outside every cluster
+  │
+  │  ExternalSecret          (hub only — the sole Vault credential)
+  ▼
+demo-stage/whoami-config     Secret on the hub
+  │
+  │  PushSecret              ESO kubernetes provider, hub → spoke
+  ├────────────► demo-int/whoami-config
+  └────────────► demo-prod/whoami-config
+```
+
+**int and prod never hold a Vault credential.** The hub's identity on each
+spoke is a `Role` scoped to Secrets in one namespace — separate from the
+cluster-admin `argocd-manager` holds, so the secret path does not ride on
+Argo CD's credentials. Vault's ESO policy is read-only and confined to the
+`demo` mount.
+
+The app's dependency is real rather than decorative: `WHOAMI_NAME` comes from
+a `secretKeyRef` that is not `optional`, so without the Secret the pod sits in
+`CreateContainerConfigError` instead of starting with an empty value. whoami
+renders it as the first line of every response:
+
+```
+Name: hello-from-vault
+Hostname: whoami-5bbdbb6b94-kl4wt
+```
+
+### Rotation needs a restart
+
+Changing the value in Vault propagates to all three `whoami-config` Secrets
+within about two minutes (ESO pulls every 1m, PushSecret replicates every 1m)
+— but **running pods keep the old value**. Environment variables from a
+`secretKeyRef` are resolved once at container start; nothing re-reads them.
+Verified: after rotating, the Secrets held the new value while the app still
+served the old one until `kubectl rollout restart`.
+
+Mounting the secret as a file would let the kubelet update it in place, but
+whoami takes its name as a command-line argument, so a restart is required
+either way. In a real deployment this is what
+[Reloader](https://github.com/stakater/Reloader) or a checksum annotation on
+the pod template is for.
+
 
 ---
 
