@@ -17,23 +17,122 @@ spec:
     app.kubernetes.io/name: whoami
   type: ClusterIP
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: whoami-int
+    env: int
+  name: whoami-canary
+  namespace: demo-int
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: whoami
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: whoami-int
+    env: int
+  name: whoami-stable
+  namespace: demo-int
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: whoami
+  type: ClusterIP
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  labels:
+    app.kubernetes.io/instance: whoami-int
+    env: int
+  name: http-health-check
+  namespace: demo-int
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - count: 3
+      failureLimit: 1
+      interval: 10s
+      name: health-check
+      provider:
+        job:
+          spec:
+            backoffLimit: 1
+            template:
+              spec:
+                containers:
+                  - command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        # The Job's stdout is the metric value, so print the
+                        # status code and nothing else.
+                        curl -o /dev/null -s -w "%{http_code}" \
+                          --connect-timeout 5 --max-time 10 \
+                          "http://${SERVICE_NAME}/"
+                    env:
+                      - name: SERVICE_NAME
+                        value: '{{args.service-name}}'
+                    image: docker.io/curlimages/curl:latest
+                    name: curl
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      runAsUser: 65532
+                restartPolicy: Never
+      successCondition: result == "200"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   annotations:
     secret.reloader.stakater.com/reload: whoami-config
   labels:
     app.kubernetes.io/instance: whoami-int
-    app.kubernetes.io/name: whoami
-    app.kubernetes.io/part-of: demo
     env: int
   name: whoami
   namespace: demo-int
 spec:
   replicas: 1
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app.kubernetes.io/name: whoami
+  strategy:
+    canary:
+      canaryService: whoami-canary
+      stableService: whoami-stable
+      steps:
+        - setWeight: 25
+        - pause:
+            duration: 20s
+        - analysis:
+            args:
+              - name: service-name
+                value: whoami-canary
+            templates:
+              - templateName: http-health-check
+        - setWeight: 50
+        - pause:
+            duration: 20s
+        - setWeight: 100
   template:
     metadata:
       labels:
