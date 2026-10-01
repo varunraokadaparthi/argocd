@@ -21,6 +21,38 @@ infra/clusters/                 kind cluster definitions
 infra/scripts/                  tooling, cluster lifecycle, bootstrap
 ```
 
+## Making a change
+
+`main` is the source of truth. Argo CD's hydrator reads
+`apps/whoami/overlays/*` from `main`, so a commit there is what starts a
+deployment.
+
+**Do not commit to `main` directly.** Branch, then raise a pull request:
+
+```sh
+git switch main && git pull
+git switch -c my-change
+# ...
+git push -u origin my-change
+gh pr create --base main
+```
+
+Merging that PR is what begins the promotion chain:
+
+```
+PR merged to main
+   └─ Argo CD hydrates each overlay      -> environment/<env>-next
+        └─ Promoter opens a gated PR     -> environment/<env>
+             ├─ int    merges itself
+             ├─ stage  merges itself once int is healthy
+             └─ prod   waits for /lgtm
+```
+
+So an ordinary change goes through two sets of pull requests: yours into
+`main`, which is reviewed for intent, and Promoter's per environment, which
+are gated on health and ordering. The second set is machine-generated —
+never edit those branches by hand.
+
 ## Config or commands?
 
 Both, and the split is deliberate. You cannot GitOps your way into having
@@ -251,7 +283,7 @@ Argo CD reads git, not your working tree. The commit holding `apps/whoami/**`
 and `argocd/**` is currently local only.
 
 ```sh
-git push origin argocd
+git push origin main
 ```
 
 `bootstrap-apps.sh` warns if you skip this, and the symptom if you ignore it

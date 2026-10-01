@@ -44,9 +44,6 @@ point the second app lands rather than retrofitting later.
 - **Every promotion hop waits a ~3 minute Argo CD poll**, so int → stage →
   prod takes several minutes of waiting rather than working. A GitHub webhook
   to `argocd-server` would make each hop immediate.
-- **The `/lgtm` workflow is duplicated** on `main` and `argocd`, because
-  `issue_comment` workflows run from the default branch. Switching the
-  default branch to `argocd` would remove the copy.
 - **`PushSecret` is `external-secrets.io/v1alpha1`** while the rest of ESO is
   `v1`. Expect it to move.
 - **Promoter is marked experimental.** Fine here; worth saying out loud if
