@@ -16,7 +16,20 @@ spec:
         - name: whoami
           image: traefik/whoami
           # Default is port 80, which a non-root container cannot bind.
-          args: ["--port=8080"]
+          # --name is rendered as the first line of every response, so the
+          # value pulled from Vault is visible in the app's own output.
+          # Kubernetes expands $(VAR) in args from the container's env.
+          args: ["--port=8080", "--name=$(WHOAMI_NAME)"]
+          env:
+            # Sourced from Vault. Not marked optional on purpose: if the
+            # Secret is absent the pod stays in CreateContainerConfigError
+            # rather than starting with a silently empty value, which is what
+            # makes the app genuinely dependent on the secret.
+            - name: WHOAMI_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: whoami-config
+                  key: greeting
           ports:
             - name: http
               containerPort: 8080

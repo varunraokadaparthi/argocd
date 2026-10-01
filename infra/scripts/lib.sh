@@ -59,6 +59,13 @@ VAULT_ADDR_HOST="http://127.0.0.1:$VAULT_HOST_PORT"
 # Address for anything running inside a cluster.
 VAULT_ADDR_CLUSTER="http://$VAULT_CONTAINER:8200"
 
+# --- secrets --------------------------------------------------------------
+ESO_VERSION="${ESO_VERSION:-2.11.0}"
+
+# The one demo secret, stored at demo/whoami. whoami renders it as the first
+# line of every response, so it is visible end to end.
+DEMO_SECRET_VALUE="${DEMO_SECRET_VALUE:-hello-from-vault}"
+
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }

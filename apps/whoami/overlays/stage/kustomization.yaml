@@ -5,6 +5,10 @@ namespace: demo-stage
 
 resources:
   - ../../base
+  # Only the stage overlay carries these: the hub is the one cluster that
+  # talks to Vault, and it pushes the result to the spokes.
+  - externalsecret.yaml
+  - pushsecret.yaml
 
 labels:
   - pairs:
