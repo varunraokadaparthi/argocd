@@ -1,0 +1,41 @@
+# Cluster infrastructure, as opposed to application workloads.
+#
+# A separate project from `demo` because the two need genuinely different
+# permissions: platform components install cluster-scoped RBAC and live
+# outside the demo-* namespaces, and the demo tenant should not be able to do
+# either. Widening `demo` to fit Reloader would have handed the application
+# tenant cluster-role creation, which is the thing an AppProject exists to
+# prevent.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Cluster infrastructure components
+
+  sourceRepos:
+    - https://github.com/varunraokadaparthi/argocd.git
+    # Helm chart repositories count as sources too.
+    - https://stakater.github.io/stakater-charts
+
+  destinations:
+    - name: in-cluster
+      namespace: reloader
+    - name: int
+      namespace: reloader
+    - name: prod
+      namespace: reloader
+
+  # Reloader watches every namespace, so it needs a ClusterRole and binding.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

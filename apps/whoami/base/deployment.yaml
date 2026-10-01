@@ -2,6 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: whoami
+  annotations:
+    # A secretKeyRef env var is resolved once at container start, so rotating
+    # the value in Vault updates the Secret but leaves running pods serving
+    # the old one. Reloader watches this Secret and triggers a rolling
+    # restart when it changes. Named explicitly rather than using
+    # reloader.stakater.com/auto so the dependency is visible here.
+    secret.reloader.stakater.com/reload: whoami-config
 spec:
   replicas: 1
   selector:

@@ -1,0 +1,58 @@
+# Reloader, on every cluster.
+#
+# Secrets reach all three clusters, so the thing that restarts pods when they
+# change has to run on all three too -- Reloader acts on Deployments in its
+# own cluster and cannot do anything remotely.
+#
+# Installed as an Argo CD Application rather than a bootstrap script because
+# it needs no credential: it is an ordinary workload, so Argo CD can own it.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: reloader
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - list:
+        elements:
+          - cluster: in-cluster
+          - cluster: int
+          - cluster: prod
+
+  template:
+    metadata:
+      name: 'reloader-{{.cluster}}'
+    spec:
+      project: platform
+
+      source:
+        repoURL: https://stakater.github.io/stakater-charts
+        chart: reloader
+        targetRevision: 2.2.18
+        helm:
+          valuesObject:
+            reloader:
+              # Watch every namespace, not just the one Reloader runs in.
+              watchGlobally: true
+              deployment:
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                  limits:
+                    cpu: 200m
+                    memory: 256Mi
+
+      destination:
+        name: '{{.cluster}}'
+        namespace: reloader
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
