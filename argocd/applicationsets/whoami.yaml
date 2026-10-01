@@ -1,10 +1,19 @@
 # An ApplicationSet is a template plus a generator: it produces one
-# Application per generator entry. Without it you would hand-write three
-# near-identical Application manifests and keep them in sync by hand.
+# Application per generator entry.
 #
-# A list generator is used here rather than a cluster or git generator because
-# the environment-to-cluster mapping is fixed and worth reading at a glance:
-# stage is the hub itself, int and prod are the spokes.
+# These Applications use spec.sourceHydrator rather than spec.source -- the
+# two are mutually exclusive. Instead of rendering the kustomize overlay and
+# applying it straight to the cluster, Argo CD renders it, pushes the result
+# to a branch, and syncs from a *different* branch that GitOps Promoter
+# controls. That gap between the two branches is where promotion happens.
+#
+#   apps/whoami/overlays/int   drySource   the kustomize source, on `argocd`
+#        │ hydrator renders and pushes
+#        ▼
+#   environment/int-next       hydrateTo   proposed, waiting on a gated PR
+#        │ Promoter merges when gates pass
+#        ▼
+#   environment/int            syncSource  what the cluster actually runs
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -17,9 +26,6 @@ spec:
   generators:
     - list:
         elements:
-          # Clusters are addressed by registered name throughout. "in-cluster"
-          # is the name ArgoCD gives the cluster it runs on, so the hub needs
-          # no special casing here.
           - env: stage
             cluster: in-cluster
           - env: int
@@ -30,18 +36,27 @@ spec:
   template:
     metadata:
       name: 'whoami-{{.env}}'
+      labels:
+        # ArgoCDCommitStatus selects on this, then reads each Application's
+        # environment from syncSource.targetBranch below.
+        promoter.argoproj.io/app: whoami
     spec:
       project: demo
 
-      source:
-        repoURL: https://github.com/varunraokadaparthi/argocd.git
-        targetRevision: argocd
-        path: 'apps/whoami/overlays/{{.env}}'
+      sourceHydrator:
+        drySource:
+          repoURL: https://github.com/varunraokadaparthi/argocd.git
+          targetRevision: argocd
+          path: 'apps/whoami/overlays/{{.env}}'
+        # Where the hydrator pushes. Promoter opens the PR from here.
+        hydrateTo:
+          targetBranch: 'environment/{{.env}}-next'
+        # Where the cluster syncs from. Only changes when a PR merges.
+        syncSource:
+          targetBranch: 'environment/{{.env}}'
+          path: .
 
       destination:
-        # Exactly one of name or server may be set; using name consistently
-        # keeps the mapping readable and survives a cluster being re-registered
-        # on a different address.
         name: '{{.cluster}}'
         namespace: 'demo-{{.env}}'
 
@@ -50,6 +65,4 @@ spec:
           prune: true
           selfHeal: true
         syncOptions:
-          # The overlays set a namespace but do not define the Namespace
-          # object, so ArgoCD creates it.
           - CreateNamespace=true

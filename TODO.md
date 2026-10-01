@@ -1,68 +1,51 @@
 # TODO
 
-## Promotion via Argo GitOps Promoter
+## Finish turning on GitOps Promoter
 
-Deferred — decided on, not yet started. Promotion today does not exist: all
-three environments track the same branch and resolve to the same image tag, so
-a commit to `apps/whoami/base` lands on int, stage and prod at once.
+Everything is built and committed; the controller is installed and the
+manifests validate against its CRDs. One step remains, and it cannot be
+scripted.
 
-Use [GitOps Promoter](https://github.com/argoproj-labs/gitops-promoter)
-(`argoproj-labs`, v0.42.1, experimental) rather than branch-per-env or a
-manual tag bump.
+**Create a GitHub App** and run `infra/scripts/promoter-bootstrap.sh` with
+`GITHUB_APP_ID`, `GITHUB_INSTALLATION_ID` and `GITHUB_APP_PRIVATE_KEY` set.
+Permissions and where to find the IDs are in the README under step 8. The
+`ScmProvider` CRD makes `appID` mandatory — GitHub has no token path, so an
+App is not optional.
 
-### How it changes the model
+Until then the Applications still use `spec.source` and all three
+environments move together. Nothing is broken; the switch to
+`sourceHydrator` is the last thing the bootstrap script does, on purpose.
 
-Promoter does not read the kustomize overlays directly. It needs a *hydrator*
-to render them and push the output to per-environment branches, then it opens
-PRs between those branches:
+## Secrets still fan out
+
+Promoter promotes git commits. The Vault secret is not in git, so
+`vault kv put demo/whoami` reaches int, stage and prod within about three
+minutes with no gate at all — Reloader then restarts prod. That is a sharper
+path to production than the git one, which at least leaves a reviewable
+commit.
+
+Closing it means per-environment paths in Vault:
 
 ```
-argocd branch            DRY branch: kustomize sources, one commit for all envs
-  └─ hydrator renders each overlay
-       environment/int-next     staging branch, hydrated manifests
-       environment/int          live branch, what int actually syncs
-       environment/stage-next
-       environment/stage
-       environment/prod-next
-       environment/prod
+demo/int/whoami      ExternalSecret in demo-int reads only this
+demo/stage/whoami
+demo/prod/whoami
 ```
 
-Promoter opens `environment/<env>-next` → `environment/<env>` PRs and holds at
-most one open PR per environment. Gates are `CommitStatus` resources, so prod
-can require int to be healthy first.
+Promoting a secret becomes writing it to the next path. Worth doing at the
+same time as the Promoter switch-on rather than after — the current shared
+`demo/whoami` cannot be gated no matter what Promoter does.
 
-Argo CD's **source hydrator** implements the hydration contract. It is beta as
-of Argo CD v3.5.0 and disabled by default.
+Open question: whether the promotion of a secret should be driven by the
+same PR that promotes the manifests, or stay a separate deliberate act. The
+first is tidier; the second is harder to do by accident.
 
-### Work required
+## Smaller things
 
-1. Install Argo CD from `install-with-hydrator.yaml`, or set
-   `hydrator.enabled: "true"` in `argocd-cmd-params-cm` and enable the commit
-   server. **Install v3.5.x from the start** — 3.4.x has no usable hydrator and
-   switching later means a reinstall.
-2. Give Argo CD **write** credentials to this repo. Read is free because the
-   repo is public; pushing hydrated branches is not. Needs a deploy key or
-   GitHub App with `Contents: read/write`.
-3. Rewrite `argocd/applicationsets/whoami.yaml` to use `spec.sourceHydrator`
-   (`drySource` / `syncSource` / `hydrateTo`) instead of `spec.source`. The two
-   are mutually exclusive.
-4. Create a **GitHub App** for Promoter with `Checks: r/w`,
-   `Contents: r/w`, `Pull requests: r/w`. Record app ID, installation ID, and
-   the private key.
-5. Install the controller. `install-without-ui.yaml` needs no cert-manager —
-   verified: zero cert-manager references, no admission webhooks. The
-   dashboard variants do.
-6. Create `ScmProvider` (+ secret with `githubAppPrivateKey`), `GitRepository`,
-   `PromotionStrategy` listing the three environment branches in order, and
-   `DependentsSuccessfulCommitStatus` for ordering. All must live in the same
-   namespace as the `PromotionStrategy`.
-7. Seed the six environment branches.
-8. Decide what gates prod: `argocd-app-health` on the previous environment is
-   the usual starting point.
-
-### Open questions
-
-- Does `autoMerge: false` on every environment give the right feel for a demo,
-  or should int auto-merge so only stage and prod need a human?
-- Promoter is marked experimental. Acceptable here; note it if this pattern
-  gets recommended anywhere real.
+- `PushSecret` is `external-secrets.io/v1alpha1` while the rest of ESO is
+  `v1`. Expect it to move.
+- Promoter is marked experimental. Fine here; worth saying out loud if this
+  pattern gets recommended anywhere real.
+- The `vault-available` gate checks that Vault is unsealed, not that the
+  specific secret an environment needs exists. A missing key would still
+  promote green and then fail to start.

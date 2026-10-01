@@ -289,12 +289,87 @@ kubectl --context kind-prod -n demo-prod  get deploy,pod,pdb
 Expect all three `Synced` / `Healthy`, with 1 / 2 / 3 replicas for int / stage
 / prod and a PodDisruptionBudget only in prod.
 
-## 8. Promotion ⬜ — see [TODO.md](TODO.md)
+## 8. Promotion — GitOps Promoter 🔶 built, not switched on
 
-Not implemented, and deliberately so. **Steps 1–7 give you fan-out, not
-promotion**: every environment tracks the same branch and the same image tag,
-so one commit moves all three at once. Argo GitOps Promoter is the chosen
-approach; the work is written up in [TODO.md](TODO.md).
+Everything is in place except a GitHub App, which is a browser step nobody
+can script. Until then the Applications still use `spec.source` and all three
+environments move together.
+
+```sh
+export GITHUB_APP_ID=123456
+export GITHUB_INSTALLATION_ID=12345678
+export GITHUB_APP_PRIVATE_KEY=~/Downloads/your-app.private-key.pem
+cd infra && ./scripts/promoter-bootstrap.sh
+```
+
+### The GitHub App
+
+One App serves both Argo CD and Promoter — the permissions are the same.
+Settings → Developer settings → GitHub Apps → New:
+
+| Repository permission | Access | Needed for |
+| --- | --- | --- |
+| Contents | Read and write | Argo CD pushes hydrated branches; Promoter merges PRs |
+| Pull requests | Read and write | Promoter opens and merges promotion PRs |
+| Commit statuses | Read and write | gates report their results |
+
+Install it on this repository, generate a private key, and note the App ID
+(on the App page) and the Installation ID (the trailing number in the URL of
+the installation's settings page).
+
+**The repo being public is not enough.** Reading needed no credential;
+hydrating does, because Argo CD has to push.
+
+### Branches
+
+Six, already created:
+
+```
+apps/whoami/overlays/int        dry source, on the `argocd` branch
+      │ Argo CD source hydrator renders and pushes
+      ▼
+environment/int-next            proposed
+      │ Promoter opens a PR, gated
+      ▼
+environment/int                 active — the int cluster syncs this
+```
+
+The active branches are seeded with the manifests currently running. That is
+deliberate: the ApplicationSet has `prune: true`, so switching to
+`sourceHydrator` while an active branch was empty would delete the running
+workload. int and stage auto-merge and would recover quickly; prod does not
+auto-merge, so it would have stayed down until someone clicked merge.
+
+### Order and gates
+
+| Environment | Merge | Waits for |
+| --- | --- | --- |
+| `int` | automatic | — |
+| `stage` | automatic | int healthy |
+| `prod` | **human clicks merge** | stage healthy |
+
+Two gates publish GitHub commit statuses, so the reasoning is visible on the
+PR rather than buried in a controller:
+
+- **`argocd-health`** (`ArgoCDCommitStatus`) — is the Argo CD Application for
+  the upstream environment actually healthy? Applications are matched by the
+  `promoter.argoproj.io/app: whoami` label, and each one's environment is read
+  from `sourceHydrator.syncSource.targetBranch`.
+- **`vault-available`** (`WebRequestCommitStatus`) — polls Vault's
+  `/v1/sys/health` and requires `sealed == false`. The app will not start
+  without its secret, so promoting into an environment whose secret source is
+  sealed would produce a green PR and a broken deployment.
+
+Ordering is enforced by `DependentsSuccessfulCommitStatus`, which turns the
+`dependsOn` graph into a gate of its own.
+
+### What this does not fix
+
+Promoter promotes **git commits**. The Vault secret lives outside git by
+design, so `vault kv put demo/whoami` still reaches all three environments at
+once. Gating that needs per-environment paths — `demo/int/whoami`,
+`demo/stage/whoami`, `demo/prod/whoami` — with each ExternalSecret reading
+only its own. Tracked in [TODO.md](TODO.md).
 
 ---
 

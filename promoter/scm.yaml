@@ -1,0 +1,34 @@
+# How Promoter authenticates to GitHub, and which repository it acts on.
+#
+# GitHub requires a GitHub App -- the CRD makes `appID` mandatory and offers
+# no personal-access-token path. The App needs:
+#   Contents: read/write        push hydrated branches, merge PRs
+#   Pull requests: read/write   open and merge promotion PRs
+#   Commit statuses: read/write report gate results
+#
+# The private key lives in a Secret created by promoter-bootstrap.sh from a
+# local .pem, so it never reaches git.
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: ScmProvider
+metadata:
+  name: github
+  namespace: promoter-system
+spec:
+  secretRef:
+    name: github-app
+  github:
+    appID: ${GITHUB_APP_ID}
+    installationID: ${GITHUB_INSTALLATION_ID}
+---
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: argocd-demo
+  namespace: promoter-system
+spec:
+  github:
+    owner: varunraokadaparthi
+    name: argocd
+  scmProviderRef:
+    kind: ScmProvider
+    name: github

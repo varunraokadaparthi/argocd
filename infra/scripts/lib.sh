@@ -61,6 +61,7 @@ VAULT_ADDR_CLUSTER="http://$VAULT_CONTAINER:8200"
 
 # --- secrets --------------------------------------------------------------
 ESO_VERSION="${ESO_VERSION:-2.11.0}"
+PROMOTER_VERSION="${PROMOTER_VERSION:-v0.42.1}"
 
 # The one demo secret, stored at demo/whoami. whoami renders it as the first
 # line of every response, so it is visible end to end.

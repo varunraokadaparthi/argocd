@@ -1,0 +1,62 @@
+# The gates. Each one publishes a GitHub commit status that Promoter reads
+# before allowing a promotion, so the decision is visible on the PR rather
+# than buried in a controller.
+
+---
+# Is the Argo CD Application for this environment actually healthy?
+#
+# Applications are matched by label, and each one's environment is read from
+# spec.sourceHydrator.syncSource.targetBranch -- which is why the
+# ApplicationSet sets both.
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: ArgoCDCommitStatus
+metadata:
+  name: whoami
+  namespace: promoter-system
+spec:
+  key: argocd-health
+  promotionStrategyRef:
+    name: whoami
+  applicationSelector:
+    matchLabels:
+      promoter.argoproj.io/app: whoami
+
+---
+# An external check, gating on something Argo CD cannot see.
+#
+# This one asks Vault whether it is initialised and unsealed before letting a
+# change proceed: the app will not start without its secret, so promoting
+# into an environment whose secret source is sealed would produce a confident
+# green PR and a broken deployment.
+#
+# reportOn: proposed -- the question is whether the incoming change is safe,
+# not whether what is already running is.
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: WebRequestCommitStatus
+metadata:
+  name: vault-available
+  namespace: promoter-system
+spec:
+  key: vault-available
+  promotionStrategyRef:
+    name: whoami
+  reportOn: proposed
+  descriptionTemplate: "Vault reachable and unsealed: {{ .Phase }}"
+  httpRequest:
+    urlTemplate: "http://vault:8200/v1/sys/health"
+    methodTemplate: GET
+    timeout: 10s
+  success:
+    when:
+      # Response is nil on reconciles where no request was made, so the
+      # previous phase is carried forward rather than read off a nil map.
+      expression: |
+        Response != nil
+          ? (Response.StatusCode == 200 && Response.Body.sealed == false)
+          : Phase == "success"
+  mode:
+    # One request per environment, polled. A single shared request would be
+    # cheaper, but per-environment keeps the status attached to each branch.
+    context: environments
+    polling:
+      interval: 1m
