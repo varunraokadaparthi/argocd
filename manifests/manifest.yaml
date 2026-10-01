@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
+    app.kubernetes.io/component: web
     app.kubernetes.io/instance: whoami-stage
     app.kubernetes.io/name: whoami
     app.kubernetes.io/part-of: demo
@@ -38,7 +39,10 @@ apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   labels:
+    app.kubernetes.io/component: web
     app.kubernetes.io/instance: whoami-stage
+    app.kubernetes.io/name: whoami
+    app.kubernetes.io/part-of: demo
     env: stage
   name: http-health-check
   namespace: demo-stage
@@ -88,7 +92,10 @@ metadata:
   annotations:
     secret.reloader.stakater.com/reload: whoami-config
   labels:
+    app.kubernetes.io/component: web
     app.kubernetes.io/instance: whoami-stage
+    app.kubernetes.io/name: whoami
+    app.kubernetes.io/part-of: demo
     env: stage
   name: whoami
   namespace: demo-stage
@@ -166,7 +173,10 @@ apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   labels:
+    app.kubernetes.io/component: web
     app.kubernetes.io/instance: whoami-stage
+    app.kubernetes.io/name: whoami
+    app.kubernetes.io/part-of: demo
     env: stage
   name: whoami-config
   namespace: demo-stage
@@ -188,7 +198,10 @@ apiVersion: external-secrets.io/v1alpha1
 kind: PushSecret
 metadata:
   labels:
+    app.kubernetes.io/component: web
     app.kubernetes.io/instance: whoami-stage
+    app.kubernetes.io/name: whoami
+    app.kubernetes.io/part-of: demo
     env: stage
   name: whoami-config
   namespace: demo-stage
