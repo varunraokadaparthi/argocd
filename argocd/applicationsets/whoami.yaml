@@ -1,0 +1,70 @@
+# An ApplicationSet is a template plus a generator: it produces one
+# Application per generator entry.
+#
+# These Applications use spec.sourceHydrator rather than spec.source -- the
+# two are mutually exclusive. Instead of rendering the kustomize overlay and
+# applying it straight to the cluster, Argo CD renders it, pushes the result
+# to a branch, and syncs from a *different* branch that GitOps Promoter
+# controls. That gap between the two branches is where promotion happens.
+#
+#   apps/whoami/overlays/int   drySource   the kustomize source, on `argocd`
+#        │ hydrator renders and pushes
+#        ▼
+#   environment/int-next       hydrateTo   proposed, waiting on a gated PR
+#        │ Promoter merges when gates pass
+#        ▼
+#   environment/int            syncSource  what the cluster actually runs
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: whoami
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - list:
+        elements:
+          - env: stage
+            cluster: in-cluster
+          - env: int
+            cluster: int
+          - env: prod
+            cluster: prod
+
+  template:
+    metadata:
+      name: 'whoami-{{.env}}'
+      labels:
+        # ArgoCDCommitStatus selects on this, then reads each Application's
+        # environment from syncSource.targetBranch below.
+        promoter.argoproj.io/app: whoami
+    spec:
+      project: demo
+
+      sourceHydrator:
+        drySource:
+          repoURL: https://github.com/varunraokadaparthi/argocd.git
+          targetRevision: argocd
+          path: 'apps/whoami/overlays/{{.env}}'
+        # Where the hydrator pushes. Promoter opens the PR from here.
+        hydrateTo:
+          targetBranch: 'environment/{{.env}}-next'
+        # Where the cluster syncs from. Only changes when a PR merges.
+        syncSource:
+          targetBranch: 'environment/{{.env}}'
+          # A subdirectory, not the branch root: Argo CD refuses to hydrate
+          # to the root outright, and the CRD separately rejects a bare ".".
+          path: manifests
+
+      destination:
+        name: '{{.cluster}}'
+        namespace: 'demo-{{.env}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

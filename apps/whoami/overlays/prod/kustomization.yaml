@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demo-prod
+
+resources:
+  - ../../base
+  - pdb.yaml
+
+# Same strategy as stage, so what prod does on promotion is what stage
+# already demonstrated.
+components:
+  - ../../components/rollout
+  - ../../components/rollout/strategy-bluegreen
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: whoami-prod
+      env: prod
+    includeSelectors: false
+
+
+# Only prod gets spreading and a disruption budget, so the overlays differ in
+# something more interesting than a replica count.
+#
+# Targets Rollout, not Deployment: the rollout component deletes the
+# Deployment, and a patch whose target matches nothing is an error.
+patches:
+  - path: spread.yaml
+    target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        replicas: 3

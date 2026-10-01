@@ -1,0 +1,72 @@
+# Argo Rollouts, on every cluster.
+#
+# The controller has to run wherever Rollout objects live -- it reconciles
+# them locally and cannot act on another cluster. Same reasoning as Reloader,
+# and like Reloader it needs no credential, so Argo CD owns it rather than a
+# bootstrap script.
+#
+# Without this controller a Rollout is an inert custom resource: Argo CD will
+# happily apply it, report Healthy, and no pods will ever be created.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - list:
+        elements:
+          - cluster: in-cluster
+          - cluster: int
+          - cluster: prod
+
+  template:
+    metadata:
+      name: 'argo-rollouts-{{.cluster}}'
+    spec:
+      project: platform
+
+      source:
+        repoURL: https://argoproj.github.io/argo-helm
+        chart: argo-rollouts
+        targetRevision: 2.43.2
+        helm:
+          valuesObject:
+            controller:
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+            # The dashboard is read-only over the cluster's own Rollouts, so
+            # it runs in each cluster and is reached by port-forward. There
+            # is no auth in front of it, which is fine for a local kind
+            # cluster and would not be anywhere else.
+            dashboard:
+              enabled: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+
+      destination:
+        name: '{{.cluster}}'
+        namespace: argo-rollouts
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # The Rollout CRD exceeds the annotation size limit that
+          # client-side apply writes.
+          - ServerSideApply=true

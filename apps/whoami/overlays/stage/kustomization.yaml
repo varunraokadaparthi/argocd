@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demo-stage
+
+resources:
+  - ../../base
+  # Only the stage overlay carries these: the hub is the one cluster that
+  # talks to Vault, and it pushes the result to the spokes.
+  - externalsecret.yaml
+  - pushsecret.yaml
+
+# Blue/green from stage onwards: the new version is stood up and checked
+# through a preview Service before any traffic moves.
+components:
+  - ../../components/rollout
+  - ../../components/rollout/strategy-bluegreen
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: whoami-stage
+      env: stage
+    includeSelectors: false
+
+# Replica count. Set by patch rather than the `replicas:` transformer, which
+# only recognises Deployment, StatefulSet, ReplicaSet and
+# ReplicationController -- a Rollout is invisible to it.
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        replicas: 2

@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demo-int
+
+resources:
+  - ../../base
+
+# Progressive delivery. int gets canary: stepped traffic shift with a health
+# check in the middle, which is the strategy that shows the most on a cluster
+# you are watching.
+components:
+  - ../../components/rollout
+  - ../../components/rollout/strategy-canary
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: whoami-int
+      env: int
+    includeSelectors: false
+
+# Replica count. Set by patch rather than the `replicas:` transformer, which
+# only recognises Deployment, StatefulSet, ReplicaSet and
+# ReplicationController -- a Rollout is invisible to it.
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        replicas: 1

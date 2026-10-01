@@ -1,0 +1,66 @@
+# The promotion order, and what must be true before a change moves on.
+#
+# Each environment has two branches: Argo CD's hydrator writes rendered
+# manifests to `environment/<env>-next`, and Promoter opens a PR from there
+# into `environment/<env>`, which is what the cluster actually syncs.
+#
+#   apps/whoami/overlays/int   (dry, this branch)
+#        │  Argo CD source hydrator renders
+#        ▼
+#   environment/int-next       (proposed)
+#        │  Promoter PR, gated
+#        ▼
+#   environment/int            (active -- int cluster syncs this)
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: PromotionStrategy
+metadata:
+  name: whoami
+  namespace: promoter-system
+spec:
+  gitRepositoryRef:
+    name: argocd-demo
+
+  # Enforces the ordering below. Without it every environment would be
+  # promotable at once, which is the fan-out we are replacing.
+  orderCommitStatusRef:
+    group: promoter.argoproj.io
+    kind: DependentsSuccessfulCommitStatus
+    name: whoami
+
+  # Must be green on an environment before anything depending on it may move.
+  activeCommitStatuses:
+    - key: argocd-health
+
+  # Must be green on the incoming change before its PR may merge.
+  proposedCommitStatuses:
+    - key: vault-available
+
+  environments:
+    # int takes changes automatically: it is the first stop and the point of
+    # fast feedback.
+    - branch: environment/int
+      autoMerge: true
+
+    # stage waits for int to be healthy, then merges on its own.
+    - branch: environment/stage
+      autoMerge: true
+      dependsOn:
+        - environment/int
+
+    # prod never merges itself. The PR is opened and gated, and a human
+    # clicks merge. This is the point of the whole exercise.
+    - branch: environment/prod
+      autoMerge: false
+      dependsOn:
+        - environment/stage
+---
+# Built-in gate implementing the dependsOn graph above.
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: DependentsSuccessfulCommitStatus
+metadata:
+  name: whoami
+  namespace: promoter-system
+spec:
+  key: dependents-successful
+  promotionStrategyRef:
+    name: whoami

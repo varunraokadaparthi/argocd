@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: whoami
+spec:
+  template:
+    spec:
+      # ScheduleAnyway rather than DoNotSchedule: these kind clusters have a
+      # single node, so a hard constraint would leave two replicas Pending.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: whoami

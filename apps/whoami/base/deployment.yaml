@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  annotations:
+    # A secretKeyRef env var is resolved once at container start, so rotating
+    # the value in Vault updates the Secret but leaves running pods serving
+    # the old one. Reloader watches this Secret and triggers a rolling
+    # restart when it changes. Named explicitly rather than using
+    # reloader.stakater.com/auto so the dependency is visible here.
+    secret.reloader.stakater.com/reload: whoami-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whoami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whoami
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami
+          # Default is port 80, which a non-root container cannot bind.
+          # --name is rendered as the first line of every response, so the
+          # value pulled from Vault is visible in the app's own output.
+          # Kubernetes expands $(VAR) in args from the container's env.
+          args: ["--port=8080", "--name=$(WHOAMI_NAME)"]
+          env:
+            # Sourced from Vault. Not marked optional on purpose: if the
+            # Secret is absent the pod stays in CreateContainerConfigError
+            # rather than starting with a silently empty value, which is what
+            # makes the app genuinely dependent on the secret.
+            - name: WHOAMI_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: whoami-config
+                  key: greeting
+          ports:
+            - name: http
+              containerPort: 8080
+          # The whole point of this app is to be cheap; three of these run
+          # across the clusters and none of them should matter.
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

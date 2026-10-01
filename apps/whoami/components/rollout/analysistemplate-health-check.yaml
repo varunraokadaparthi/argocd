@@ -1,0 +1,49 @@
+# An HTTP health check, run as a Job against whichever Service it is given.
+#
+# Used by blue/green before promoting the preview, and by canary between
+# steps. Taking the service name as an argument is what lets the same
+# template serve both.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: http-health-check
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: health-check
+      interval: 10s
+      count: 3
+      successCondition: result == "200"
+      # One retry. A single blip should not fail a promotion, but a
+      # consistently unhealthy target should.
+      failureLimit: 1
+      provider:
+        job:
+          spec:
+            backoffLimit: 1
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: curl
+                    image: docker.io/curlimages/curl:latest
+                    command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        # The Job's stdout is the metric value, so print the
+                        # status code and nothing else.
+                        curl -o /dev/null -s -w "%{http_code}" \
+                          --connect-timeout 5 --max-time 10 \
+                          "http://${SERVICE_NAME}/"
+                    env:
+                      - name: SERVICE_NAME
+                        value: "{{args.service-name}}"
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      runAsUser: 65532
+                      capabilities:
+                        drop: ["ALL"]

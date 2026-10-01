@@ -1,0 +1,11 @@
+# Spoke cluster. Registered as a managed cluster against the stage hub.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: prod
+
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.245.0.0/16"
+
+nodes:
+  - role: control-plane

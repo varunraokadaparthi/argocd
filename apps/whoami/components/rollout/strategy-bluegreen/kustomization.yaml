@@ -1,0 +1,40 @@
+# Blue/green: stand the new version up alongside the old, check it through
+# the preview Service, then switch the active Service over in one step.
+#
+# Layered on top of the `rollout` component, which must come first.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - service-preview.yaml
+
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        strategy:
+          blueGreen:
+            activeService: whoami
+            previewService: whoami-preview
+            # Promote on its own once the analysis passes and the soak
+            # elapses. Set this false to require `kubectl argo rollouts
+            # promote whoami` -- a second human gate on top of the /lgtm one.
+            autoPromotionEnabled: true
+            autoPromotionSeconds: 30
+            # Keep the old ReplicaSet briefly after the switch so a rollback
+            # is immediate rather than a fresh scale-up.
+            scaleDownDelaySeconds: 30
+            prePromotionAnalysis:
+              templates:
+                - templateName: http-health-check
+              args:
+                - name: service-name
+                  value: whoami-preview

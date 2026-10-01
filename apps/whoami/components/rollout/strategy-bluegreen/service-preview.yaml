@@ -1,0 +1,16 @@
+# Where the new version is reachable before it takes over.
+#
+# The Rollout controller owns this Service's selector, pointing it at the new
+# ReplicaSet while the active Service still serves the old one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami-preview
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: whoami
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
