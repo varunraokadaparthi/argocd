@@ -21,6 +21,9 @@ infra/clusters/                 kind cluster definitions
 infra/scripts/                  tooling, cluster lifecycle, bootstrap
 ```
 
+Picking this up after a break? See [HANDOVER.md](HANDOVER.md) for how to
+restart it and the traps already paid for.
+
 ## Making a change
 
 `main` is the source of truth. Argo CD's hydrator reads
