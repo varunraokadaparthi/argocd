@@ -320,6 +320,25 @@ the installation's settings page).
 **The repo being public is not enough.** Reading needed no credential;
 hydrating does, because Argo CD has to push.
 
+Of the three values only the private key is a secret. The App ID and
+Installation ID are just identifiers — the key is what signs a JWT proving
+"I am this App", which is then exchanged for a one-hour installation token.
+Keep the `.pem` outside the repo at mode 0600 (`*.pem` is gitignored as a
+backstop). If it leaks, generate a new key on the App page; the App and its
+installation survive.
+
+Check the values before using them — wrong IDs otherwise look like a healthy
+controller that silently never opens a PR:
+
+```sh
+cd infra && ./scripts/github-app-check.sh
+```
+
+It signs a JWT, exchanges it for an installation token, verifies
+`contents` / `pull_requests` / `statuses` are all `write`, and confirms the
+installation can see the repository — reporting which step failed. If the
+installation ID is wrong it lists the ones the App actually has.
+
 ### Branches
 
 Six, already created:

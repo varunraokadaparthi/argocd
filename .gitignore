@@ -6,3 +6,7 @@
 
 # Vault unseal keys and root token -- never commit
 infra/vault/.vault-init.json
+
+# GitHub App private keys -- never commit
+*.pem
+*.private-key.pem
