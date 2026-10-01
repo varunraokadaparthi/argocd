@@ -41,6 +41,38 @@ kubectl --context kind-stage -n argocd get applications
 Expect nine, all Synced/Healthy. If they are not, the usual cause is Vault
 still being sealed — `vault-up.sh` is idempotent and unseals on every run.
 
+**After more than a day down, re-run the two secrets bootstraps:**
+
+```sh
+./scripts/secrets-bootstrap.sh
+./scripts/promoter-bootstrap.sh    # needs the GITHUB_APP_* variables
+```
+
+Both ESO tokens are created with `-period=24h`. A periodic Vault token only
+stays valid while something renews it inside each period, and nothing here
+does, so they lapse while the environment is off. The failure is quiet:
+existing Kubernetes Secrets keep their values, because ESO stops refreshing
+rather than deleting, so every app carries on looking healthy — but
+rotation stops working, and a `vault kv put` will not propagate. Both
+scripts are idempotent and mint fresh tokens.
+
+## What persists, and what is rebuilt
+
+| | Survives stop | Survives `delete-clusters.sh` | Rebuilt by |
+| --- | --- | --- | --- |
+| Vault's data (`demo/*`, `platform/*`) | yes | **yes** — Vault is not in a cluster | nothing; it is the source |
+| Kubernetes Secrets derived from it | yes | no | ESO, from Vault |
+| Argo CD, registered spokes, promoter | yes | no | the bootstrap scripts |
+| Cluster workloads | yes | no | Argo CD, from git |
+
+Vault's file backend lives in the `vault-data` podman volume, so nothing
+added to Vault is lost by tearing the clusters down. Rebuilding from
+scratch needs no secret re-entered by hand — not even the GitHub App key,
+which is in Vault at `platform/github-app`.
+
+The one irreplaceable file is `infra/vault/.vault-init.json`. Without that
+unseal key the volume is only encrypted bytes.
+
 ### Port-forwards
 
 None survive a session. Restart whichever you need:
