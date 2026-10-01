@@ -23,6 +23,18 @@ Open question: whether a secret should be promoted by the same PR that
 promotes the manifests, or stay a separate deliberate act. The first is
 tidier; the second is harder to do by accident.
 
+## When a second app arrives
+
+Do not add per-app environment branches. Set
+`PromotionStrategy.spec.activePath` instead (e.g. `apps/whoami`): proposed
+branches become `environment/<env>-next/<activePath>` while the active
+branch stays shared, so each app promotes independently without multiplying
+the branches someone has to create by hand.
+
+That change also moves `hydrator.metadata` to `<activePath>/hydrator.metadata`
+and means `syncSource.path` has to match the activePath. Worth doing at the
+point the second app lands rather than retrofitting later.
+
 ## Smaller things
 
 - **The pod spec is duplicated** between `apps/whoami/base/deployment.yaml`

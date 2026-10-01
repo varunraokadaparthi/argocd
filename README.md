@@ -397,6 +397,28 @@ environment/int-next            proposed
 environment/int                 active — the int cluster syncs this
 ```
 
+### Why `environment/` and not the app name
+
+`environment/<env>` is the naming Promoter's own documentation recommends,
+and it stays correct with more than one application. The axis that scales is
+not the branch name but `PromotionStrategy.spec.activePath`:
+
+```
+environment/int                        shared active branch
+environment/int-next/apps/whoami       whoami's proposed branch
+environment/int-next/apps/payments     payments' proposed branch
+```
+
+Each application gets its own PromotionStrategy and its own proposed branch,
+so it promotes independently, but they all merge into one active branch per
+environment, each touching only its own path. Naming the branches after the
+app instead would mean three more active branches per application — all of
+which someone has to create by hand, since nothing in the toolchain creates
+them. `activePath` keeps it at three regardless of how many apps there are.
+
+Only one app here, so `activePath` is unset and the manifests sit at the
+branch root under `manifests/`.
+
 Only the three active branches need creating, and only as empty commits —
 GitHub cannot open a pull request into a base branch that does not exist,
 and Promoter has no branch-creation code of its own. The `-next` branches
