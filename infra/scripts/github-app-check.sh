@@ -15,8 +15,9 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 : "${GITHUB_APP_ID:?set GITHUB_APP_ID}"
-: "${GITHUB_INSTALLATION_ID:?set GITHUB_INSTALLATION_ID}"
 : "${GITHUB_APP_PRIVATE_KEY:?set GITHUB_APP_PRIVATE_KEY}"
+# Optional: discovered below if unset, which saves digging it out of a URL.
+GITHUB_INSTALLATION_ID="${GITHUB_INSTALLATION_ID:-}"
 [[ -f "$GITHUB_APP_PRIVATE_KEY" ]] || die "private key not found: $GITHUB_APP_PRIVATE_KEY"
 command -v openssl >/dev/null || die "openssl is required"
 
@@ -46,6 +47,31 @@ if [[ -z "$app_slug" ]]; then
   die "App ID $GITHUB_APP_ID did not authenticate -- check the ID matches the key"
 fi
 log "authenticated as App '$app_slug' (id $GITHUB_APP_ID)"
+
+# --- 1b. discover the installation if not given ---------------------------
+
+if [[ -z "$GITHUB_INSTALLATION_ID" ]]; then
+  installs="$(curl -s --max-time 20 -H "Authorization: Bearer $jwt" \
+    -H "Accept: application/vnd.github+json" https://api.github.com/app/installations)"
+  count="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 0)' <<<"$installs" 2>/dev/null || echo 0)"
+
+  if [[ "$count" -eq 0 ]]; then
+    warn "this App is not installed anywhere yet"
+    warn "install it on $REPO_OWNER/$REPO_NAME: https://github.com/settings/apps/$app_slug/installations"
+    die "no installation to check"
+  fi
+
+  if [[ "$count" -gt 1 ]]; then
+    warn "this App has $count installations; set GITHUB_INSTALLATION_ID to the one you want:"
+    python3 -c 'import json,sys
+for i in json.load(sys.stdin): print("    id=%-12s account=%s" % (i["id"], i["account"]["login"]))' <<<"$installs"
+    die "ambiguous installation"
+  fi
+
+  GITHUB_INSTALLATION_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])' <<<"$installs")"
+  account="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["account"]["login"])' <<<"$installs")"
+  log "discovered installation $GITHUB_INSTALLATION_ID on '$account'"
+fi
 
 # --- 2. exchange it for an installation token -----------------------------
 
@@ -92,4 +118,9 @@ repo_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
 log "repository $REPO_OWNER/$REPO_NAME is accessible"
 
 echo
-log "all checks passed -- ./scripts/promoter-bootstrap.sh will work with these values"
+log "all checks passed -- run promoter-bootstrap.sh with:"
+echo
+printf '  export GITHUB_APP_ID=%s\n' "$GITHUB_APP_ID"
+printf '  export GITHUB_INSTALLATION_ID=%s\n' "$GITHUB_INSTALLATION_ID"
+printf '  export GITHUB_APP_PRIVATE_KEY=%s\n' "$GITHUB_APP_PRIVATE_KEY"
+printf '  ./scripts/promoter-bootstrap.sh\n'
