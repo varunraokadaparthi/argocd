@@ -70,7 +70,7 @@ log "installation $GITHUB_INSTALLATION_ID issued a token"
 
 perms="$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("permissions",{})))' <<<"$tok_resp")"
 ok=true
-for want in contents:write pull_requests:write statuses:write; do
+for want in contents:write pull_requests:write checks:write; do
   key="${want%%:*}"; need="${want##*:}"
   have="$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('$key','(none)'))" "$perms")"
   if [[ "$have" == "$need" ]]; then

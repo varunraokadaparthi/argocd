@@ -36,7 +36,7 @@ Create a GitHub App first (Settings -> Developer settings -> GitHub Apps):
   Repository permissions
     Contents          Read and write    push hydrated branches, merge PRs
     Pull requests     Read and write    open and merge promotion PRs
-    Commit statuses   Read and write    report gate results
+    Checks            Read and write    report gate results as check runs
 
   Then: Install App on this repository, generate a private key, and note the
   App ID (on the App page) and the Installation ID (the trailing number in

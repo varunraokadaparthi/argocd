@@ -4,7 +4,7 @@
 # no personal-access-token path. The App needs:
 #   Contents: read/write        push hydrated branches, merge PRs
 #   Pull requests: read/write   open and merge promotion PRs
-#   Commit statuses: read/write report gate results
+#   Checks: read/write          report gate results as check runs
 #
 # The private key lives in a Secret created by promoter-bootstrap.sh from a
 # local .pem, so it never reaches git.

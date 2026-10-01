@@ -311,7 +311,7 @@ Settings → Developer settings → GitHub Apps → New:
 | --- | --- | --- |
 | Contents | Read and write | Argo CD pushes hydrated branches; Promoter merges PRs |
 | Pull requests | Read and write | Promoter opens and merges promotion PRs |
-| Commit statuses | Read and write | gates report their results |
+| Checks | Read and write | gates report their results, via check runs |
 
 Install it on this repository, generate a private key, and note the App ID
 (on the App page) and the Installation ID (the trailing number in the URL of
