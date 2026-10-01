@@ -320,6 +320,18 @@ the installation's settings page).
 **The repo being public is not enough.** Reading needed no credential;
 hydrating does, because Argo CD has to push.
 
+**A personal access token cannot be used instead**, and not because Promoter
+is being opinionated. Gates are published as GitHub *check runs*, and per
+GitHub's own documentation, "write permission for the REST API to interact
+with checks is only available to GitHub Apps. OAuth apps and authenticated
+users … are not able to create them." A PAT would authenticate, open pull
+requests, and never report why one was blocked. Promoter's GitLab, Gitea and
+Forgejo providers do take a plain token — GitHub is the exception.
+
+A PAT *would* suffice for Argo CD's push credential alone, since the hydrator
+only writes branches. That is two credentials to rotate instead of one, for no
+gain, so a single App serves both here.
+
 Of the three values only the private key is a secret. The App ID and
 Installation ID are just identifiers — the key is what signs a JWT proving
 "I am this App", which is then exchanged for a one-hour installation token.
