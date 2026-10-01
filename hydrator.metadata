@@ -1,8 +1,8 @@
 {
   "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
-  "drySha": "fb897e9e78b26cfe1d355409c7ed4dff1318d9b4",
-  "author": "vkadapar <vkadapar@redhat.com>",
-  "date": "2026-10-01T05:36:37Z",
-  "subject": "Introduce Argo Rollouts via kustomize components",
-  "body": "Follows the components pattern from hp-gitops-manifests: a `rollout`\ncomponent that replaces the Deployment with a Rollout, plus a strategy\ncomponent layered on top, so an overlay opts in with two lines and the\n\"use a Rollout\" and \"which strategy\" decisions stay separate.\n\nint gets canary, stage and prod get blue/green with a pre-promotion health\ncheck, so prod does on promotion what stage already demonstrated.\n\nThree things the base layout forced:\n\nThe rollout component deletes the Deployment. Leaving it would have two\ncontrollers managing pods behind the same selector.\n\nprod's spread patch retargets to Rollout, since a patch whose target matches\nnothing is a hard error once the Deployment is gone.\n\nReplica counts move from the `replicas:` transformer to per-overlay patches.\nThat transformer only recognises Deployment, StatefulSet, ReplicaSet and\nReplicationController, so a Rollout is invisible to it and the build fails.\n\nThe controller is an ApplicationSet under the platform project, like\nReloader, because it needs no credential. Without it a Rollout is inert:\nArgo CD applies it, reports Healthy, and no pods appear.\n\nAssisted-by: Claude Code <noreply@anthropic.com>\nCo-Authored-By: Claude Code <noreply@anthropic.com>\n"
+  "drySha": "0449267ddfedd0ef22e58ab8870579c3e61ea0a2",
+  "author": "Varun Rao Kadaparthi <vkadapar@redhat.com>",
+  "date": "2026-10-01T06:44:45Z",
+  "subject": "Merge pull request #8 from varunraokadaparthi/add-component-label",
+  "body": "Label resources with app.kubernetes.io/component\n"
 }
