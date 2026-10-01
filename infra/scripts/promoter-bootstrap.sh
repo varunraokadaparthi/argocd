@@ -52,6 +52,12 @@ fi
 
 [[ -f "$GITHUB_APP_PRIVATE_KEY" ]] || die "private key not found: $GITHUB_APP_PRIVATE_KEY"
 
+[[ -f "$VAULT_SECRETS_FILE" ]] || die "vault is not initialised -- run vault-up.sh"
+podman inspect "$VAULT_CONTAINER" --format '{{.State.Status}}' 2>/dev/null | grep -qx running \
+  || die "vault container is not running -- run vault-up.sh"
+kubectl --context "$hub_ctx" -n external-secrets get deploy external-secrets >/dev/null 2>&1 \
+  || die "External Secrets Operator is not installed -- run secrets-bootstrap.sh"
+
 # --- hydrator preflight ---------------------------------------------------
 
 # Without this the Applications will accept a sourceHydrator and then never
@@ -62,25 +68,45 @@ fi
 
 # --- argo cd write credential ---------------------------------------------
 
-# The repo is public, so reading needed nothing. Hydrating does: Argo CD has
-# to push the environment/*-next branches.
-log "giving Argo CD write access to the repo"
-kubectl --context "$hub_ctx" -n "$ARGOCD_NAMESPACE" apply -f - >/dev/null <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: repo-argocd-demo
-  namespace: $ARGOCD_NAMESPACE
-  labels:
-    argocd.argoproj.io/secret-type: repository
-stringData:
-  type: git
-  url: https://github.com/varunraokadaparthi/argocd.git
-  githubAppID: "$GITHUB_APP_ID"
-  githubAppInstallationID: "$GITHUB_INSTALLATION_ID"
-  githubAppPrivateKey: |
-$(sed 's/^/    /' "$GITHUB_APP_PRIVATE_KEY")
-EOF
+# The App credential goes into Vault, and ESO builds both Secrets from it --
+# Promoter's in promoter-system and Argo CD's repository credential in argocd.
+# The .pem therefore only has to exist on disk for this one command; rotating
+# it later is a `vault kv put`, with no re-run of this script.
+root_token="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["root_token"])' \
+  "$VAULT_SECRETS_FILE")"
+vault_exec() {
+  podman exec -i -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN="$root_token" \
+    "$VAULT_CONTAINER" vault "$@"
+}
+
+if vault_exec secrets list -format=json | grep -q '"platform/"'; then
+  log "kv-v2 engine 'platform' already enabled"
+else
+  # A separate mount from the application one so a policy can grant read on
+  # platform credentials without also granting read on demo/.
+  log "enabling kv-v2 engine at platform/"
+  vault_exec secrets enable -path=platform kv-v2 >/dev/null
+fi
+
+log "storing the GitHub App credential in Vault at platform/github-app"
+vault_exec kv put platform/github-app \
+  appID="$GITHUB_APP_ID" \
+  installationID="$GITHUB_INSTALLATION_ID" \
+  privateKey=@/dev/stdin >/dev/null < "$GITHUB_APP_PRIVATE_KEY"
+
+log "applying platform read policy"
+vault_exec policy write eso-platform - < "$REPO_ROOT/secrets/vault/platform-policy.hcl" >/dev/null
+
+log "minting a Vault token for the platform store"
+platform_token="$(vault_exec token create -policy=eso-platform -period=24h -format=json \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["auth"]["client_token"])')"
+
+kubectl --context "$hub_ctx" -n external-secrets create secret generic vault-platform-token \
+  --from-literal=token="$platform_token" \
+  --dry-run=client -o yaml | kubectl --context "$hub_ctx" apply -f - >/dev/null
+
+log "applying the platform ClusterSecretStore"
+kubectl --context "$hub_ctx" apply -f "$REPO_ROOT/secrets/eso/platform-secret-store.yaml" >/dev/null
 
 # --- promoter controller --------------------------------------------------
 
@@ -108,10 +134,22 @@ kubectl --context "$hub_ctx" apply --server-side --force-conflicts -f "$promoter
 kubectl --context "$hub_ctx" -n promoter-system \
   rollout status deploy/promoter-controller-manager --timeout=300s
 
-log "storing the GitHub App key for Promoter"
-kubectl --context "$hub_ctx" -n promoter-system create secret generic github-app \
-  --from-file=githubAppPrivateKey="$GITHUB_APP_PRIVATE_KEY" \
-  --dry-run=client -o yaml | kubectl --context "$hub_ctx" apply -f - >/dev/null
+# Both Secrets are built by ESO from Vault rather than created here, so the
+# only copy of the key lives in Vault.
+log "syncing the GitHub App credential out of Vault"
+kubectl --context "$hub_ctx" apply -f "$REPO_ROOT/promoter/github-app-externalsecrets.yaml" >/dev/null
+
+for pair in "promoter-system github-app" "$ARGOCD_NAMESPACE repo-argocd-demo"; do
+  set -- $pair
+  for i in $(seq 1 30); do
+    [[ "$(kubectl --context "$hub_ctx" -n "$1" get externalsecret "$2" \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" == "True" ]] && break
+    sleep 2
+  done
+  kubectl --context "$hub_ctx" -n "$1" get secret "$2" >/dev/null 2>&1 \
+    || die "ESO did not produce $1/$2 -- check 'kubectl -n $1 describe externalsecret $2'"
+  log "  $1/$2 synced"
+done
 
 # --- promoter resources ---------------------------------------------------
 

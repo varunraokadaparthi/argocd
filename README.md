@@ -335,9 +335,34 @@ gain, so a single App serves both here.
 Of the three values only the private key is a secret. The App ID and
 Installation ID are just identifiers — the key is what signs a JWT proving
 "I am this App", which is then exchanged for a one-hour installation token.
-Keep the `.pem` outside the repo at mode 0600 (`*.pem` is gitignored as a
-backstop). If it leaks, generate a new key on the App page; the App and its
-installation survive.
+
+### The key lives in Vault, not on disk
+
+`promoter-bootstrap.sh` writes the credential to `platform/github-app` and
+then lets ESO build both consumers' Secrets from it:
+
+```
+Vault  platform/github-app {appID, installationID, privateKey}
+  ├──► promoter-system/github-app      Promoter's ScmProvider
+  └──► argocd/repo-argocd-demo         Argo CD's repository credential
+```
+
+So the `.pem` only has to exist on disk for that one command, and rotating
+the key afterwards is a `vault kv put` — no re-running the bootstrap, no key
+in a shell history. `*.pem` is gitignored as a backstop. If it leaks,
+generate a new one on the App page; the App and its installation survive.
+
+**It does not use the `vault` store the demo app uses.** That one is usable
+from any namespace on the hub, so anything able to create an ExternalSecret
+could have read a key that can push to every branch and merge its own
+promotion PRs. The `vault-platform` store is scoped twice over: its Vault
+token can read `platform/*` and nothing else, and `conditions` limit it to
+the `argocd` and `promoter-system` namespaces. Verified — an ExternalSecret
+in `demo-stage` referencing it fails with `SecretSyncedError` and no Secret
+is produced.
+
+If Vault goes down these Secrets keep their last value; ESO stops refreshing
+rather than deleting, so Argo CD and Promoter carry on.
 
 Check the values before using them — wrong IDs otherwise look like a healthy
 controller that silently never opens a PR:
