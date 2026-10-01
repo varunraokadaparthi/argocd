@@ -296,9 +296,11 @@ merge themselves in order, and prod waits for a human.
 Setting it up on a fresh cluster needs a GitHub App, which is a browser step
 nobody can script.
 
-`promoter-bootstrap.sh` calls `promoter-branches.sh`, which creates the six
-environment branches and seeds the active ones with the manifests currently
-running — both are idempotent and safe to re-run on their own.
+`promoter-bootstrap.sh` calls `promoter-branches.sh`, which creates the
+three active environment branches as empty commits. The
+`environment/*-next` branches are *not* created: pushing them is the
+hydrator's job, and a pre-created commit without a `hydrator.metadata` file
+makes Promoter refuse it with "has hydrated commit … but no dry SHA".
 
 ```sh
 export GITHUB_APP_ID=123456
@@ -395,11 +397,15 @@ environment/int-next            proposed
 environment/int                 active — the int cluster syncs this
 ```
 
-The active branches are seeded with the manifests currently running. That is
-deliberate: the ApplicationSet has `prune: true`, so switching to
-`sourceHydrator` while an active branch was empty would delete the running
-workload. int and stage auto-merge and would recover quickly; prod does not
-auto-merge, so it would have stayed down until someone clicked merge.
+Only the three active branches need creating, and only as empty commits —
+GitHub cannot open a pull request into a base branch that does not exist,
+and Promoter has no branch-creation code of its own. The `-next` branches
+appear when Argo CD first hydrates.
+
+Creating them empty is safe despite `prune: true`. An empty branch has no
+`manifests/` path at all, since git cannot store an empty directory, so
+Argo CD reports `app path does not exist` and syncs nothing. It does not
+prune, because it will not act on a desired state it could not determine.
 
 ### Order and gates
 
