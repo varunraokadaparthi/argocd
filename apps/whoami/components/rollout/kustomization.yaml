@@ -1,0 +1,33 @@
+# Opt an environment into progressive delivery.
+#
+# A Component rather than a base so each overlay chooses: include it and the
+# Deployment is replaced by a Rollout; leave it out and nothing changes. The
+# strategy itself comes from a second component alongside this one, so the
+# "use a Rollout" and "use blue/green" decisions stay separate.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - rollout.yaml
+  - analysistemplate-health-check.yaml
+
+# The image pin lives in base's kustomization, whose transformers do not reach
+# resources introduced here, so it is repeated. Keep the two in step.
+images:
+  - name: traefik/whoami
+    newTag: v1.12.0
+
+# Delete the Deployment the base provides. Without this both it and the
+# Rollout would manage pods matching the same selector and fight.
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: whoami
+    patch: |
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: whoami

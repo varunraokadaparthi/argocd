@@ -1,0 +1,69 @@
+# The Rollout that replaces the base Deployment.
+#
+# The pod spec is duplicated from base/deployment.yaml rather than referenced,
+# which is the cost of this pattern: a Rollout is a separate kind, not a patch
+# over a Deployment. (Rollout does support workloadRef to point at a
+# Deployment instead, but then the Deployment stays in the cluster scaled to
+# zero, which is more confusing to read than a little duplication.)
+#
+# Keep this in step with base/deployment.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: whoami
+  annotations:
+    # Same reason as the Deployment: the secret arrives as an env var,
+    # resolved once at container start. Reloader understands Rollouts.
+    secret.reloader.stakater.com/reload: whoami-config
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whoami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whoami
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami
+          args: ["--port=8080", "--name=$(WHOAMI_NAME)"]
+          env:
+            - name: WHOAMI_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: whoami-config
+                  key: greeting
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

@@ -1,0 +1,42 @@
+# Canary: shift traffic to the new version in steps, checking health between
+# them, so a bad version is caught while most traffic still goes elsewhere.
+#
+# Layered on top of the `rollout` component, which must come first.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - service-canary.yaml
+  - service-stable.yaml
+
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        strategy:
+          canary:
+            canaryService: whoami-canary
+            stableService: whoami-stable
+            steps:
+              # Without a traffic-routing provider the weight controls the
+              # share of pods, not of requests. Good enough to demonstrate
+              # the shape; a real canary wants a mesh or ingress integration.
+              - setWeight: 25
+              - pause: {duration: 20s}
+              - analysis:
+                  templates:
+                    - templateName: http-health-check
+                  args:
+                    - name: service-name
+                      value: whoami-canary
+              - setWeight: 50
+              - pause: {duration: 20s}
+              - setWeight: 100

@@ -10,12 +10,31 @@ resources:
   - externalsecret.yaml
   - pushsecret.yaml
 
+# Blue/green from stage onwards: the new version is stood up and checked
+# through a preview Service before any traffic moves.
+components:
+  - ../../components/rollout
+  - ../../components/rollout/strategy-bluegreen
+
 labels:
   - pairs:
       app.kubernetes.io/instance: whoami-stage
       env: stage
     includeSelectors: false
 
-replicas:
-  - name: whoami
-    count: 2
+# Replica count. Set by patch rather than the `replicas:` transformer, which
+# only recognises Deployment, StatefulSet, ReplicaSet and
+# ReplicationController -- a Rollout is invisible to it.
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: whoami
+    patch: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Rollout
+      metadata:
+        name: whoami
+      spec:
+        replicas: 2

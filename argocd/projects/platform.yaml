@@ -1,11 +1,11 @@
 # Cluster infrastructure, as opposed to application workloads.
 #
 # A separate project from `demo` because the two need genuinely different
-# permissions: platform components install cluster-scoped RBAC and live
-# outside the demo-* namespaces, and the demo tenant should not be able to do
-# either. Widening `demo` to fit Reloader would have handed the application
-# tenant cluster-role creation, which is the thing an AppProject exists to
-# prevent.
+# permissions: platform components install cluster-scoped RBAC and CRDs and
+# live outside the demo-* namespaces, and the demo tenant should not be able
+# to do any of that. Widening `demo` to fit would have handed the application
+# tenant ClusterRole and CRD creation, which is the thing an AppProject
+# exists to prevent.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -18,6 +18,7 @@ spec:
     - https://github.com/varunraokadaparthi/argocd.git
     # Helm chart repositories count as sources too.
     - https://stakater.github.io/stakater-charts
+    - https://argoproj.github.io/argo-helm
 
   destinations:
     - name: in-cluster
@@ -26,8 +27,15 @@ spec:
       namespace: reloader
     - name: prod
       namespace: reloader
+    - name: in-cluster
+      namespace: argo-rollouts
+    - name: int
+      namespace: argo-rollouts
+    - name: prod
+      namespace: argo-rollouts
 
-  # Reloader watches every namespace, so it needs a ClusterRole and binding.
+  # Reloader watches every namespace and Rollouts ships its own CRDs, so both
+  # need cluster-scoped resources the application tenant must not have.
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -35,6 +43,8 @@ spec:
       kind: ClusterRole
     - group: rbac.authorization.k8s.io
       kind: ClusterRoleBinding
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
 
   namespaceResourceWhitelist:
     - group: "*"
