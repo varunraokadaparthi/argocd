@@ -109,20 +109,50 @@ Name: hello-from-vault
 Hostname: whoami-5bbdbb6b94-kl4wt
 ```
 
-### Rotation needs a restart
+### Rotation
 
-Changing the value in Vault propagates to all three `whoami-config` Secrets
-within about two minutes (ESO pulls every 1m, PushSecret replicates every 1m)
-— but **running pods keep the old value**. Environment variables from a
-`secretKeyRef` are resolved once at container start; nothing re-reads them.
-Verified: after rotating, the Secrets held the new value while the app still
-served the old one until `kubectl rollout restart`.
+Rotation is end to end with no manual step:
 
-Mounting the secret as a file would let the kubelet update it in place, but
-whoami takes its name as a command-line argument, so a restart is required
-either way. In a real deployment this is what
-[Reloader](https://github.com/stakater/Reloader) or a checksum annotation on
-the pod template is for.
+```sh
+vault kv put demo/whoami greeting="something-new"
+```
+
+Within roughly three minutes every cluster is serving the new value. The
+chain is ESO pulling on its 1m interval, PushSecret replicating on its own
+1m interval, then [Reloader](https://github.com/stakater/Reloader) noticing
+the changed Secret and performing a rolling restart.
+
+That last step is necessary, not decorative. An environment variable from a
+`secretKeyRef` is resolved once at container start, so updating the Secret
+alone leaves running pods serving the stale value — verified before Reloader
+was added. Mounting the secret as a file would not help either, because
+whoami takes its name as a command-line argument.
+
+The Deployment opts in by name rather than with
+`reloader.stakater.com/auto`, so the dependency is readable where it matters:
+
+```yaml
+metadata:
+  annotations:
+    secret.reloader.stakater.com/reload: whoami-config
+```
+
+Reloader runs on **all three clusters** — it acts on Deployments in its own
+cluster and cannot reach across — installed by the `reloader` ApplicationSet
+under the `platform` project.
+
+## Two AppProjects
+
+| Project | Holds | May create |
+| --- | --- | --- |
+| `demo` | the whoami app | namespaced resources in `demo-*` only |
+| `platform` | Reloader | `ClusterRole`, `ClusterRoleBinding`, `Namespace` |
+
+Reloader watches every namespace, so it needs cluster-scoped RBAC and a
+namespace outside `demo-*`. Widening `demo` to fit would have granted the
+application tenant the ability to create ClusterRoles — precisely what an
+AppProject exists to prevent. Platform components and application workloads
+want different permissions, so they get different projects.
 
 
 ---
