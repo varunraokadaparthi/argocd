@@ -3,3 +3,6 @@
 *.swo
 *~
 .DS_Store
+
+# Vault unseal keys and root token -- never commit
+infra/vault/.vault-init.json

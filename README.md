@@ -44,6 +44,34 @@ stop and restart the node containers; etcd, Argo CD and the registered spokes
 all survive. `delete-clusters.sh` discards the clusters and is the only way to
 get the disk back.
 
+## Vault
+
+Vault runs *beside* the clusters rather than in one of them — a podman
+container on the same `kind` network:
+
+```sh
+cd infra
+./scripts/vault-up.sh      # start, initialise on first run, unseal
+./scripts/vault-down.sh    # stop, keep data;  --purge to destroy it
+```
+
+| | |
+| --- | --- |
+| From the host | `http://127.0.0.1:8200` (UI, token auth) |
+| From any pod | `http://vault:8200` |
+| Storage | file backend in the `vault-data` podman volume |
+| Unseal keys | `infra/vault/.vault-init.json`, mode 0600, gitignored |
+
+Being outside the clusters means every cluster reaches it by the same name,
+it survives `delete-clusters.sh`, and it behaves the way Vault usually does
+for an application team: a service someone else operates. `vault-up.sh` is
+idempotent — it initialises once and unseals on every run, which is what you
+need after a restart.
+
+Two things that are wrong for production and deliberate here: TLS is
+disabled, and the seal uses a single key share so a script can replay it.
+
+
 ---
 
 # Full setup

@@ -39,6 +39,26 @@ CLUSTER_CONFIG_DIR="$INFRA_DIR/clusters"
 ARGOCD_DIR="$REPO_ROOT/argocd"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 
+# --- vault ----------------------------------------------------------------
+# Vault runs beside the clusters rather than in them, as a container on the
+# same podman network, so every cluster can reach it at http://vault:8200.
+VAULT_VERSION="${VAULT_VERSION:-2.1.1}"
+VAULT_IMAGE="${VAULT_IMAGE:-docker.io/hashicorp/vault:$VAULT_VERSION}"
+VAULT_CONTAINER="${VAULT_CONTAINER:-vault}"
+VAULT_VOLUME="${VAULT_VOLUME:-vault-data}"
+VAULT_NETWORK="${VAULT_NETWORK:-kind}"
+VAULT_HOST_PORT="${VAULT_HOST_PORT:-8200}"
+VAULT_DIR="$INFRA_DIR/vault"
+
+# Unseal keys and the root token land here. Gitignored, 0600, and outside the
+# clusters so that deleting a cluster does not strand the data in the volume.
+VAULT_SECRETS_FILE="${VAULT_SECRETS_FILE:-$VAULT_DIR/.vault-init.json}"
+
+# Address for the vault CLI / curl from the host.
+VAULT_ADDR_HOST="http://127.0.0.1:$VAULT_HOST_PORT"
+# Address for anything running inside a cluster.
+VAULT_ADDR_CLUSTER="http://$VAULT_CONTAINER:8200"
+
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }
