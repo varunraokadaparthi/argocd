@@ -36,14 +36,22 @@ fi
 log "applying AppProject"
 kubectl --context "$hub_ctx" apply -f "$ARGOCD_DIR/projects/demo.yaml"
 
-log "applying ApplicationSet"
-kubectl --context "$hub_ctx" apply -f "$ARGOCD_DIR/applicationsets/whoami.yaml"
+# Platform components live in their own project because they need
+# cluster-scoped RBAC and CRDs that the application tenant must not have.
+log "applying platform AppProject"
+kubectl --context "$hub_ctx" apply -f "$ARGOCD_DIR/projects/platform.yaml"
 
+log "applying ApplicationSets"
+for appset in whoami reloader argo-rollouts; do
+  kubectl --context "$hub_ctx" apply -f "$ARGOCD_DIR/applicationsets/$appset.yaml"
+done
+
+# Three environments x three ApplicationSets.
 log "waiting for Applications to be generated"
 for i in $(seq 1 30); do
   count="$(kubectl --context "$hub_ctx" -n "$ARGOCD_NAMESPACE" \
     get applications.argoproj.io --no-headers 2>/dev/null | wc -l)"
-  [[ "$count" -ge 3 ]] && break
+  [[ "$count" -ge 9 ]] && break
   sleep 2
 done
 

@@ -245,7 +245,7 @@ The script splits it instead:
 It then verifies each address from a pod inside the hub, checking DNS,
 routing and TLS against the stored CA.
 
-## 5. Push the app config ⬜
+## 5. Push the app config ✅
 
 Argo CD reads git, not your working tree. The commit holding `apps/whoami/**`
 and `argocd/**` is currently local only.
@@ -260,40 +260,45 @@ is `app path does not exist` on every Application.
 The repo is public, so **no read credentials are needed**. Write credentials
 become necessary only for the hydrator in [TODO.md](TODO.md).
 
-## 6. Apply the AppProject and ApplicationSet ✅
+## 6. Apply the AppProjects and ApplicationSets ✅
 
 ```sh
 cd infra
 ./scripts/bootstrap-apps.sh
 ```
 
-Applies `argocd/projects/demo.yaml` then
-`argocd/applicationsets/whoami.yaml`, in that order — an Application naming a
-project that does not exist is rejected. The script refuses to run if Argo CD
-is missing or a spoke is unregistered, and warns about unpushed commits.
+Applies both AppProjects first — an Application naming a project that does
+not exist is rejected — then the three ApplicationSets: `whoami`, `reloader`
+and `argo-rollouts`. Nine Applications in total, three per cluster. The
+script refuses to run if Argo CD is missing or a spoke is unregistered, and
+warns about unpushed commits.
 
-The AppProject restricts this tenant to this repo and to `demo-*` namespaces
-on the three clusters, and permits `Namespace` as the only cluster-scoped kind
-so `CreateNamespace=true` works.
+This is the last imperative step for the application itself. From here Argo
+CD reconciles from the repo.
 
-This is the last imperative step. From here Argo CD reconciles from the repo.
-
-## 7. Verify ⬜
+## 7. Verify ✅
 
 ```sh
-argocd app list                      # whoami-int, whoami-stage, whoami-prod
-kubectl --context kind-int  -n demo-int   get deploy,pod
-kubectl --context kind-prod -n demo-prod  get deploy,pod,pdb
+argocd app list
+kubectl --context kind-int  -n demo-int  get rollout,pod
+kubectl --context kind-prod -n demo-prod get rollout,pod,pdb
 ```
 
-Expect all three `Synced` / `Healthy`, with 1 / 2 / 3 replicas for int / stage
-/ prod and a PodDisruptionBudget only in prod.
+Expect nine Applications `Synced` / `Healthy`, and 1 / 2 / 3 replicas for
+int / stage / prod with a PodDisruptionBudget only in prod.
 
-## 8. Promotion — GitOps Promoter 🔶 built, not switched on
+## 8. Promotion — GitOps Promoter ✅
 
-Everything is in place except a GitHub App, which is a browser step nobody
-can script. Until then the Applications still use `spec.source` and all three
-environments move together.
+Live. A change to `apps/whoami/overlays/*` is hydrated to all three
+`-next` branches, Promoter opens a gated PR per environment, int and stage
+merge themselves in order, and prod waits for a human.
+
+Setting it up on a fresh cluster needs a GitHub App, which is a browser step
+nobody can script.
+
+`promoter-bootstrap.sh` calls `promoter-branches.sh`, which creates the six
+environment branches and seeds the active ones with the manifests currently
+running — both are idempotent and safe to re-run on their own.
 
 ```sh
 export GITHUB_APP_ID=123456
@@ -418,6 +423,100 @@ PR rather than buried in a controller:
 
 Ordering is enforced by `DependentsSuccessfulCommitStatus`, which turns the
 `dependsOn` graph into a gate of its own.
+
+### Merging prod with /lgtm
+
+`environment/prod` has `autoMerge: false`, so Promoter opens the PR, runs the
+gates and stops. The merge is done by a GitHub Actions workflow
+(`.github/workflows/lgtm-merge.yml`) when someone comments:
+
+```
+/lgtm
+```
+
+Promoter deliberately does not perform this merge, so the act is attributable
+to the person who approved it. The workflow checks four things before
+merging: the comment starts with `/lgtm`, the PR's base is an
+`environment/*` branch so this cannot become a general merge bot, the
+commenter has write access, and every check run on the head SHA is
+successful. It comments on success and explains itself on refusal.
+
+`/lgtm` is an option, not a requirement — the Merge button still works, and
+nothing blocks a normal PR. It has no effect on int or stage, which Promoter
+merges itself long before anyone could comment.
+
+**`issue_comment` workflows always run from the default branch's copy of the
+file.** The default branch here is `main`, so the workflow is committed there
+as well; editing it only on `argocd` changes nothing. Switching the default
+branch to `argocd` would remove the duplicate.
+
+## Progressive delivery
+
+Argo Rollouts replaces the Deployment with a `Rollout`, so a new version is
+checked before it takes all the traffic. Opted into per environment with two
+lines, following the kustomize *components* pattern:
+
+```yaml
+components:
+  - ../../components/rollout
+  - ../../components/rollout/strategy-canary
+```
+
+| Environment | Strategy | Shape |
+| --- | --- | --- |
+| `int` | canary | 25% → pause → health analysis → 50% → pause → 100% |
+| `stage` | blue/green | stand up alongside, analyse via preview Service, switch |
+| `prod` | blue/green | same as stage, so promotion holds no surprises |
+
+```
+apps/whoami/components/rollout/
+├── kustomization.yaml                 adds the Rollout, deletes the Deployment
+├── rollout.yaml
+├── analysistemplate-health-check.yaml  HTTP check, takes a Service name
+├── strategy-bluegreen/
+└── strategy-canary/
+```
+
+Splitting "use a Rollout" from "which strategy" is what makes the strategy
+swappable without touching the workload.
+
+### The UI
+
+The dashboard is per-cluster — it only shows Rollouts in the cluster it runs
+in — so reach each by port-forward:
+
+```sh
+kubectl --context kind-int   -n argo-rollouts port-forward svc/argo-rollouts-int-dashboard        3100:3100
+kubectl --context kind-stage -n argo-rollouts port-forward svc/argo-rollouts-in-cluster-dashboard 3101:3100
+```
+
+Then <http://localhost:3100/rollouts/demo-int> and
+<http://localhost:3101/rollouts/demo-stage>. Open the namespace-scoped path:
+the dashboard defaults to `default`, which is empty.
+
+`setup-tools.sh` installs the kubectl plugin, which shows the same state and
+can drive a rollout by hand:
+
+```sh
+kubectl argo rollouts get rollout whoami -n demo-int --context kind-int --watch
+kubectl argo rollouts promote whoami -n demo-prod --context kind-prod
+```
+
+### Three things the base layout forced
+
+**The `replicas:` transformer cannot see a Rollout.** It only recognises
+Deployment, StatefulSet, ReplicaSet and ReplicationController, so every
+overlay failed to build until replica counts moved to per-overlay patches.
+
+**prod's spread patch had to retarget to `Rollout`.** Once the component
+deletes the Deployment, a patch whose target matches nothing is a hard error,
+not a no-op.
+
+**The pod spec is duplicated** between `base/deployment.yaml` and
+`components/rollout/rollout.yaml`. A Rollout is a different kind, not a patch
+over a Deployment, so there is no way to inherit it. `workloadRef` avoids the
+duplication but leaves a zero-scaled Deployment in the cluster, which reads
+worse. They will drift if only one is edited.
 
 ### What this does not fix
 

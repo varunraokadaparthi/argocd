@@ -43,10 +43,19 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 512Mi
-            # The dashboard is a separate deployment and not needed here;
-            # `kubectl argo rollouts get rollout` shows the same state.
+            # The dashboard is read-only over the cluster's own Rollouts, so
+            # it runs in each cluster and is reached by port-forward. There
+            # is no auth in front of it, which is fine for a local kind
+            # cluster and would not be anywhere else.
             dashboard:
-              enabled: false
+              enabled: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
 
       destination:
         name: '{{.cluster}}'

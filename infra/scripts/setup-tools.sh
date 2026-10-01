@@ -37,6 +37,9 @@ installed_version() {
     argocd)  argocd version --client --short 2>/dev/null \
                | awk '{print $2}' | cut -d+ -f1 ;;
     podman)  podman --version 2>/dev/null | awk '{print $3}' ;;
+    kubectl-argo-rollouts)
+             kubectl-argo-rollouts version --short 2>/dev/null \
+               | awk '{print $2}' | cut -d+ -f1 ;;
   esac
 }
 
@@ -144,6 +147,16 @@ install_argocd() {
     "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-${OS}-${ARCH}"
 }
 
+# The Rollouts CLI is a kubectl plugin: on PATH as kubectl-argo-rollouts, it
+# becomes `kubectl argo rollouts`. Needed to promote or abort a Rollout by
+# hand, and to watch one progress.
+install_rollouts_plugin() {
+  needs_install kubectl-argo-rollouts "$ROLLOUTS_VERSION" \
+    || { log "kubectl-argo-rollouts $ROLLOUTS_VERSION already installed"; return; }
+  install_binary kubectl-argo-rollouts \
+    "https://github.com/argoproj/argo-rollouts/releases/download/${ROLLOUTS_VERSION}/kubectl-argo-rollouts-${OS}-${ARCH}"
+}
+
 # --- host configuration ---------------------------------------------------
 
 # Rootless kind needs cpu/memory/pids delegated to the user slice. This is the
@@ -206,13 +219,14 @@ install_kind
 install_kubectl
 install_helm
 install_argocd
+install_rollouts_plugin
 check_subuid
 configure_cgroup_delegation
 check_path
 
 echo
 log "installed versions"
-for tool in podman kind kubectl helm argocd; do
+for tool in podman kind kubectl helm argocd kubectl-argo-rollouts; do
   printf '  %-8s %s\n' "$tool" "$(installed_version "$tool" || true)"
 done
 echo

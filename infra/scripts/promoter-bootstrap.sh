@@ -162,6 +162,11 @@ log "applying PromotionStrategy and gates"
 kubectl --context "$hub_ctx" apply -f "$REPO_ROOT/promoter/promotion-strategy.yaml" >/dev/null
 kubectl --context "$hub_ctx" apply -f "$REPO_ROOT/promoter/commit-statuses.yaml" >/dev/null
 
+# The branches have to exist and carry manifests before the Applications
+# point at them.
+log "ensuring environment branches exist"
+"$(dirname "${BASH_SOURCE[0]}")/promoter-branches.sh"
+
 # Switched over last, once the write credential exists. Before that the
 # hydrator cannot push, so the Applications would sync from branches that
 # never get populated -- and with prune enabled that removes the running
