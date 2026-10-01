@@ -54,7 +54,9 @@ spec:
         # Where the cluster syncs from. Only changes when a PR merges.
         syncSource:
           targetBranch: 'environment/{{.env}}'
-          path: .
+          # A subdirectory, not the branch root: Argo CD refuses to hydrate
+          # to the root outright, and the CRD separately rejects a bare ".".
+          path: manifests
 
       destination:
         name: '{{.cluster}}'
