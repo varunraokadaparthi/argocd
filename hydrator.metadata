@@ -1,0 +1,8 @@
+{
+  "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
+  "drySha": "2e00b782fe3d0e9546db141f21ec07837c58ec3f",
+  "author": "vkadapar <vkadapar@redhat.com>",
+  "date": "2026-10-01T04:35:20Z",
+  "subject": "Source the GitHub App credential from Vault instead of a file",
+  "body": "promoter-bootstrap.sh now writes the App ID, installation ID and private key\nto platform/github-app, and ESO builds both consumers' Secrets from there:\nPromoter's ScmProvider secret and Argo CD's repository credential. The .pem\nonly has to exist on disk for that one command, and rotation becomes a\n`vault kv put` rather than a re-run.\n\nA separate mount, policy and store from the application secrets, on purpose.\nThe `vault` ClusterSecretStore is usable from any namespace on the hub, so\nreusing it would let anything able to create an ExternalSecret read a key\nthat can push to every branch and merge its own promotion PRs. vault-platform\nis scoped twice: its token reads platform/* only, and conditions limit it to\nthe argocd and promoter-system namespaces.\n\nVerified end to end with a throwaway key: the multi-line PEM survives Vault\nand ESO templating byte-identical, the Argo CD Secret is built with its\nrepository label plus static and fetched fields, and an ExternalSecret in\ndemo-stage referencing the platform store is refused with no Secret created.\n\nAssisted-by: Claude Code <noreply@anthropic.com>\nCo-Authored-By: Claude Code <noreply@anthropic.com>\n"
+}
