@@ -9,6 +9,7 @@ labels:
   - pairs:
       app.kubernetes.io/name: whoami
       app.kubernetes.io/part-of: demo
+      app.kubernetes.io/component: web
     includeSelectors: false
 
 images:

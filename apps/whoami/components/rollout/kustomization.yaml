@@ -11,8 +11,16 @@ resources:
   - rollout.yaml
   - analysistemplate-health-check.yaml
 
-# The image pin lives in base's kustomization, whose transformers do not reach
-# resources introduced here, so it is repeated. Keep the two in step.
+# base's transformers do not reach resources introduced by a component, so
+# its labels are repeated here for the same reason the image pin is. Keep
+# all three in step with base/kustomization.yaml.
+labels:
+  - pairs:
+      app.kubernetes.io/name: whoami
+      app.kubernetes.io/part-of: demo
+      app.kubernetes.io/component: web
+    includeSelectors: false
+
 images:
   - name: traefik/whoami
     newTag: v1.12.0
