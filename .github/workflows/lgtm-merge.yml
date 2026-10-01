@@ -1,0 +1,111 @@
+# Merge a promotion PR when someone comments /lgtm.
+#
+# GitOps Promoter deliberately does not merge these: environment/prod has
+# autoMerge: false, so Promoter opens the PR, runs the gates, and stops. This
+# workflow is the separate thing that merges, so the act is attributable to
+# the person who approved it rather than to a controller.
+#
+# NOTE: issue_comment workflows always run from the DEFAULT branch's copy of
+# this file, not from the PR's branch. Changes here only take effect once they
+# are on the default branch.
+name: lgtm-merge
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  merge:
+    # Cheap filters first so unrelated comments do not start a runner.
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/lgtm')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gather PR state
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh pr view "$PR" --repo "$REPO" \
+            --json baseRefName,headRefName,headRefOid,state,isDraft,mergeable > pr.json
+          for k in baseRefName headRefName headRefOid state isDraft mergeable; do
+            echo "$k=$(jq -r ".$k" pr.json)" >> "$GITHUB_OUTPUT"
+          done
+
+      # Only promotion PRs. A /lgtm on an ordinary PR is ignored, so this
+      # cannot be used as a general-purpose merge bot by accident.
+      - name: Require an environment branch
+        if: ${{ !startsWith(steps.pr.outputs.baseRefName, 'environment/') }}
+        run: |
+          echo "base is '${{ steps.pr.outputs.baseRefName }}', not a promotion PR -- ignoring"
+          exit 1
+
+      # Without this anyone with a GitHub account could merge to prod by
+      # commenting on a public repo.
+      - name: Require write access
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.event.comment.user.login }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          perm="$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)"
+          echo "$ACTOR has '$perm'"
+          case "$perm" in
+            admin|write|maintain) ;;
+            *) echo "::error::$ACTOR lacks write access"; exit 1 ;;
+          esac
+
+      # The promoter gates are the reason the PR exists. Merging past a red
+      # one would defeat the whole arrangement, so check them rather than
+      # trusting that someone looked.
+      - name: Require all checks green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.pr.outputs.headRefOid }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/commits/$SHA/check-runs" --jq \
+            '.check_runs[] | "\(.name)=\(.conclusion // "pending")"' | tee checks.txt
+          if [ ! -s checks.txt ]; then
+            echo "::error::no check runs on $SHA -- refusing to merge blind"
+            exit 1
+          fi
+          if grep -vq '=success$' checks.txt; then
+            echo "::error::not every check is successful"
+            exit 1
+          fi
+
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Merge commit rather than squash: the hydrated branches are machine
+          # generated and Promoter follows their history.
+          gh pr merge "$PR" --repo "$REPO" --merge
+          gh pr comment "$PR" --repo "$REPO" --body \
+            "Merged by \`/lgtm\` from @${{ github.event.comment.user.login }}. Argo CD will sync \`${{ steps.pr.outputs.baseRefName }}\` shortly."
+
+      - name: Explain refusal
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr comment "$PR" --repo "$REPO" --body \
+            "\`/lgtm\` from @${{ github.event.comment.user.login }} was not applied — see [the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). Usually a gate is still pending or red." || true
