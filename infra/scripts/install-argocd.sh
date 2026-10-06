@@ -11,13 +11,12 @@ cluster_exists "$HUB" || die "hub cluster '$HUB' does not exist -- run create-cl
 
 ctx="kind-$HUB"
 
-# The admission webhook must be up before the Argo CD Ingress is applied.
-log "applying argocd/ingress-nginx (server-side)"
-kubectl --context "$ctx" apply -k "$ARGOCD_DIR/ingress-nginx" --server-side --force-conflicts
-kubectl --context "$ctx" -n ingress-nginx rollout status \
-  deploy/ingress-nginx-controller --timeout=300s
-kubectl --context "$ctx" -n ingress-nginx wait --for=condition=Complete \
-  job/ingress-nginx-admission-patch --timeout=120s
+# Ingress controller first, so the Argo CD Ingress has something to serve it.
+log "installing Traefik $TRAEFIK_CHART_VERSION"
+helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null
+helm --kube-context "$ctx" upgrade --install traefik traefik/traefik \
+  --version "$TRAEFIK_CHART_VERSION" --namespace traefik --create-namespace \
+  --values "$ARGOCD_DIR/traefik/values.yaml" --wait --timeout 5m
 
 log "creating namespace '$ARGOCD_NAMESPACE' on '$HUB'"
 kubectl --context "$ctx" create namespace "$ARGOCD_NAMESPACE" \

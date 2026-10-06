@@ -15,6 +15,7 @@ HELM_VERSION="${HELM_VERSION:-v3.20.2}"
 # Must be 3.5.x: the source hydrator the promotion work depends on is beta as
 # of Argo CD 3.5.0 and absent before it. Keep the CLI and server in step.
 ARGOCD_VERSION="${ARGOCD_VERSION:-v3.5.3}"
+TRAEFIK_CHART_VERSION="${TRAEFIK_CHART_VERSION:-41.6.1}"
 
 # Multi-arch manifest list covering linux/amd64 and linux/arm64.
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:${K8S_VERSION}@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f}"

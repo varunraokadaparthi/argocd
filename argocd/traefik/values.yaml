@@ -1,0 +1,32 @@
+# Traefik on the hub, as the ingress controller. Chart version is pinned in
+# infra/scripts/lib.sh (TRAEFIK_CHART_VERSION).
+#
+# Runs on the node labelled ingress-ready=true and binds hostPorts 80/443,
+# which stage.yaml maps to localhost:8080 / localhost:8443. kind has no cloud
+# provider, so the Service stays ClusterIP rather than a pending LoadBalancer.
+deployment:
+  kind: Deployment
+  replicas: 1
+
+nodeSelector:
+  ingress-ready: "true"
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Equal
+    effect: NoSchedule
+
+service:
+  spec:
+    type: ClusterIP
+
+ports:
+  web:
+    hostPort: 80
+  websecure:
+    hostPort: 443
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+

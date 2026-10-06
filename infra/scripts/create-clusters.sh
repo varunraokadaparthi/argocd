@@ -21,7 +21,7 @@ for cluster in "${CLUSTERS[@]}"; do
     --wait 120s
 done
 
-# ingress-nginx's kind manifest schedules onto this label. Applied after
+# Traefik's values (argocd/traefik/values.yaml) schedule onto this label. Applied after
 # creation rather than via kubeadmConfigPatches so the config files stay
 # independent of the kubeadm API version the node image ships.
 log "labelling hub node for ingress"
