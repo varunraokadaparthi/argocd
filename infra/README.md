@@ -36,7 +36,7 @@ in `scripts/lib.sh`.
 | Tool      | Version  | Source                                    |
 | --------- | -------- | ----------------------------------------- |
 | `podman`  | any      | platform package manager                   |
-| `kind`    | v0.31.0  | pinned binary → `~/.local/bin`             |
+| `kind`    | v0.33.0  | pinned binary → `~/.local/bin`             |
 | `kubectl` | v1.35.0  | pinned binary → `~/.local/bin`             |
 | `helm`    | v3.20.2  | pinned binary → `~/.local/bin`             |
 | `argocd`  | v3.5.3   | pinned binary → `~/.local/bin`             |
