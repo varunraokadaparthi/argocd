@@ -114,7 +114,7 @@ certificates already carry the right SANs.
 **There is no LoadBalancer.** kind ships no cloud provider, so
 `type: LoadBalancer` services sit in `<pending>` forever. The hub maps host
 ports 8080 and 8443 to container ports 80 and 443, so installing an ingress
-controller on `stage` puts the ArgoCD UI on <http://localhost:8080>. The hub
+controller on `stage` puts the ArgoCD UI on <https://localhost:8443> (`install-argocd.sh` installs it). The hub
 node is labelled `ingress-ready=true` for ingress-nginx's kind manifest.
 The spokes have no port mappings; reach them with `kubectl port-forward`.
 

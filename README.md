@@ -236,17 +236,16 @@ flag afterwards so a wrong pin fails loudly here instead of confusingly later.
 Server-side apply is used out of necessity, not preference: the Argo CD CRDs
 exceed the 262144-byte limit on the annotation that client-side apply writes.
 
-The script prints the version and initial admin password. Reach the UI with:
+The script installs ingress-nginx first (`argocd/ingress-nginx/`, pinned), then
+Argo CD with an Ingress, and prints the version and initial admin password.
+The UI is at <https://localhost:8443> (user: `admin`; the certificate is
+self-signed, so the browser will warn). ingress-nginx redirects plain HTTP to
+HTTPS, so 8443 is the port to use even though 8080 is also mapped. If something
+else on your machine already holds 8080, it will shadow the cluster there.
 
-```sh
-kubectl --context kind-stage -n argocd port-forward svc/argocd-server 8081:443
-# https://localhost:8081  (user: admin)
-```
-
-For ingress instead — the `stage` cluster maps host ports 8080/8443 to 80/443
-and its node is labelled `ingress-ready=true` — install ingress-nginx's kind
-manifest and add an Ingress. A `LoadBalancer` Service will never get an
-address; kind ships no cloud provider.
+`server.insecure` is set on argocd-server so TLS ends at the ingress instead of
+the two fighting over redirects. A `LoadBalancer` Service will never get an
+address; kind ships no cloud provider, hence ingress rather than a Service.
 
 ## 4. Register the spoke clusters ✅
 

@@ -11,6 +11,14 @@ cluster_exists "$HUB" || die "hub cluster '$HUB' does not exist -- run create-cl
 
 ctx="kind-$HUB"
 
+# The admission webhook must be up before the Argo CD Ingress is applied.
+log "applying argocd/ingress-nginx (server-side)"
+kubectl --context "$ctx" apply -k "$ARGOCD_DIR/ingress-nginx" --server-side --force-conflicts
+kubectl --context "$ctx" -n ingress-nginx rollout status \
+  deploy/ingress-nginx-controller --timeout=300s
+kubectl --context "$ctx" -n ingress-nginx wait --for=condition=Complete \
+  job/ingress-nginx-admission-patch --timeout=120s
+
 log "creating namespace '$ARGOCD_NAMESPACE' on '$HUB'"
 kubectl --context "$ctx" create namespace "$ARGOCD_NAMESPACE" \
   --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
@@ -51,6 +59,5 @@ printf '  password  %s\n' \
   "$(kubectl --context "$ctx" -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret \
      -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || echo '(not found)')"
 echo
-log "UI: kubectl --context $ctx -n $ARGOCD_NAMESPACE port-forward svc/argocd-server 8081:443"
-log "    then https://localhost:8081 as 'admin'"
+log "UI: https://localhost:8443 as 'admin' (self-signed cert)"
 log "next: ./scripts/register-clusters.sh"

@@ -46,4 +46,4 @@ for cluster in "${CLUSTERS[@]}"; do
   printf '  %-8s %-22s %s\n' "$role" "kind-$cluster" "$internal"
 done
 echo
-log "ArgoCD UI will be reachable at http://localhost:8080 once an ingress controller is installed on '$HUB'"
+log "ArgoCD UI will be reachable at https://localhost:8443 once install-argocd.sh has run on '$HUB'"

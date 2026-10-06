@@ -12,3 +12,15 @@ namespace: argocd
 
 resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/install-with-hydrator.yaml
+  - ingress.yaml
+
+# Plain HTTP between ingress-nginx and argocd-server; otherwise the server
+# redirects to its own self-signed TLS and the ingress loops on it.
+patches:
+  - target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+    patch: |-
+      - op: add
+        path: /data/server.insecure
+        value: "true"
