@@ -8,7 +8,7 @@ export KIND_EXPERIMENTAL_PROVIDER=podman
 # --- pinned versions ------------------------------------------------------
 # kubectl is pinned to the node image's Kubernetes version. Keep them in step:
 # a skew wider than one minor version is unsupported and fails in odd ways.
-KIND_VERSION="${KIND_VERSION:-v0.31.0}"
+KIND_VERSION="${KIND_VERSION:-v0.33.0}"
 K8S_VERSION="${K8S_VERSION:-v1.35.0}"
 HELM_VERSION="${HELM_VERSION:-v3.20.2}"
 
