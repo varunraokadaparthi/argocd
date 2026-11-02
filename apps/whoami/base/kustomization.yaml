@@ -16,4 +16,4 @@ images:
   - name: traefik/whoami
     newTag: v1.12.0
 commonAnnotations:
-  sdcicd-2028/change: "1"
+  sdcicd-2028/change: "2"
