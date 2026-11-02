@@ -1,7 +1,7 @@
 {
   "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
-  "drySha": "e958b32337c0953c2025c47f7461c7f4662f706a",
+  "drySha": "1995306332c20c0d9b9af3e26bfcd6e7439869fc",
   "author": "vkadapar <vkadapar@redhat.com>",
-  "date": "2026-11-02T06:22:35Z",
-  "subject": "SDCICD-2028: change 5 with broken int image"
+  "date": "2026-11-02T06:27:07Z",
+  "subject": "SDCICD-2028: restore int image"
 }
