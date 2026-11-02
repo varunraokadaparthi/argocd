@@ -18,3 +18,7 @@ labels:
       app.kubernetes.io/instance: whoami2028-int
       env: int
     includeSelectors: false
+
+images:
+  - name: traefik/whoami
+    newTag: v0.0.0-does-not-exist
