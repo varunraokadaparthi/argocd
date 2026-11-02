@@ -1,6 +1,6 @@
 {
   "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
-  "drySha": "09ab49f10257431661b07b303aa59d26f4640bde",
+  "drySha": "2ad292418496505a2d1a4180bfd083ee4ded792e",
   "commands": [
     "kustomize build ./apps/whoami/overlays/stage"
   ]

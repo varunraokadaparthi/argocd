@@ -1,7 +1,7 @@
 {
   "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
-  "drySha": "09ab49f10257431661b07b303aa59d26f4640bde",
+  "drySha": "2ad292418496505a2d1a4180bfd083ee4ded792e",
   "author": "vkadapar <vkadapar@redhat.com>",
-  "date": "2026-11-02T06:14:00Z",
-  "subject": "SDCICD-2028: whoami change 3"
+  "date": "2026-11-02T06:20:37Z",
+  "subject": "SDCICD-2028: whoami change 4"
 }
