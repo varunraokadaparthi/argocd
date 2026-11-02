@@ -1,0 +1,7 @@
+{
+  "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
+  "drySha": "9afd52b32acb4eb6191433dbffdfa3fffd4c7940",
+  "author": "vkadapar <vkadapar@redhat.com>",
+  "date": "2026-11-02T04:36:36Z",
+  "subject": "SDCICD-2028: add unrelated path for the hydration-note repro"
+}
