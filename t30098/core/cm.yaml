@@ -2,4 +2,4 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: core
-data: {version: "1"}
+data: {version: "2"}
