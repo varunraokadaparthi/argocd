@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: ms-
+  labels: {t30098: ms}
+  annotations: {argocd.argoproj.io/hook: PostSync, argocd.argoproj.io/inject-sync-info: revision}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: ms}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/library/alpine:3.22
+        command: [sh, -c, 'echo "APP=$A"; echo "P1=$P1"; echo "P2=$P2"; echo "PLAIN=$PLAIN"']
+        env:
+        - {name: A, valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision-app']"}}}
+        - {name: P1, valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision-1']"}}}
+        - {name: P2, valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision-2']"}}}
+        - {name: PLAIN, valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}}

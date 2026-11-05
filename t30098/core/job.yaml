@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: core-
+  labels: {t30098: core}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/inject-sync-info: revision
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: core}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/alpine/git:latest
+        command: [sh, -c]
+        args:
+        - echo "INJECTED=$SYNC_REVISION"; sleep 40; echo "BRANCH_HEAD_NOW=$(git ls-remote https://github.com/varunraokadaparthi/argocd.git refs/heads/sync-rev-30098/main | cut -f1)"
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}

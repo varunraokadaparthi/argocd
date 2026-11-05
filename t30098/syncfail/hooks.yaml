@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: fail-
+  labels: {t30098: fail}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: fail}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/alpine/git:latest
+        command: [sh, -c]
+        args:
+        - exit 1
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: syncfail-
+  labels: {t30098: syncfail}
+  annotations:
+    argocd.argoproj.io/hook: SyncFail
+    argocd.argoproj.io/inject-sync-info: revision
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: syncfail}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/alpine/git:latest
+        command: [sh, -c]
+        args:
+        - echo "INJECTED=$SYNC_REVISION"
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}

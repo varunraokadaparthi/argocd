@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: retained
+  labels: {t30098: retained}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/inject-sync-info: revision
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: retained}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/alpine/git:latest
+        command: [sh, -c]
+        args:
+        - exit 1
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}

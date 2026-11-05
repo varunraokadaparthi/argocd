@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fixed
+  labels: {t30098: fixed}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/inject-sync-info: revision
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: fixed}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/alpine/git:latest
+        command: [sh, -c]
+        args:
+        - echo "INJECTED=$SYNC_REVISION"
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}
