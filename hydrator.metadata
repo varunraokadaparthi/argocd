@@ -1,0 +1,7 @@
+{
+  "repoURL": "https://github.com/varunraokadaparthi/argocd.git",
+  "drySha": "c82512d72f66191ff99c0542357954d1b19ca7a9",
+  "author": "vkadapar <vkadapar@redhat.com>",
+  "date": "2026-11-05T18:20:56Z",
+  "subject": "SDCICD-2023: core change B"
+}

@@ -1,0 +1,37 @@
+apiVersion: v1
+data:
+  version: "1"
+kind: ConfigMap
+metadata:
+  name: hydr
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/inject-sync-info: revision
+  generateName: hydr-
+  labels:
+    t30098: hydr
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        t30098: hydr
+    spec:
+      containers:
+        - args:
+            - echo "INJECTED=$SYNC_REVISION"; sleep 40; echo "HYDRATED_HEAD_NOW=$(git ls-remote https://github.com/varunraokadaparthi/argocd.git refs/heads/sync-rev-30098/env/int | cut -f1)"
+          command:
+            - sh
+            - -c
+          env:
+            - name: SYNC_REVISION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['argocd.argoproj.io/sync-revision']
+          image: docker.io/alpine/git:latest
+          name: c
+      restartPolicy: Never
