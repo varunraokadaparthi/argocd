@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: hold-
+  labels: {t30098: hold}
+  annotations: {argocd.argoproj.io/hook: PreSync, argocd.argoproj.io/inject-sync-info: revision}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: hold}
+    spec:
+      restartPolicy: Never
+      containers: [{name: c, image: docker.io/library/alpine:3.22, command: [sh, -c, "sleep 45"]}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: verify-
+  labels: {t30098: verify}
+  annotations: {argocd.argoproj.io/hook: PostSync, argocd.argoproj.io/inject-sync-info: revision}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {t30098: verify}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: docker.io/library/alpine:3.22
+        command: [sh, -c, 'echo "INJECTED=$SYNC_REVISION"']
+        env:
+        - name: SYNC_REVISION
+          valueFrom: {fieldRef: {fieldPath: "metadata.annotations['argocd.argoproj.io/sync-revision']"}}
